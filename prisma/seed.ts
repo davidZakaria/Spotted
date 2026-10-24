@@ -26,8 +26,14 @@ async function main() {
       data: {
         name: "Acme Labs",
         slug: "acme-labs",
+        onboardedAt: new Date(),
         members: { create: { userId: user.id, role: "OWNER" } },
       },
+    });
+  } else if (!workspace.onboardedAt) {
+    workspace = await prisma.workspace.update({
+      where: { id: workspace.id },
+      data: { onboardedAt: new Date() },
     });
   }
 

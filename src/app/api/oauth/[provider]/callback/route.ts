@@ -1,8 +1,8 @@
-import { NextResponse } from "next/server";
 import { Source } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { env, oauthRedirect } from "@/lib/config";
 import { getJson } from "@/lib/connectors/http";
+import { redirectTo } from "@/lib/redirects";
 
 const PLATFORM: Record<string, Source> = {
   meta: "FACEBOOK",
@@ -16,7 +16,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ provider
   const url = new URL(req.url);
   const code = url.searchParams.get("code");
   const stateRaw = url.searchParams.get("state");
-  if (!code || !stateRaw) return NextResponse.redirect(new URL("/app/settings/accounts?error=oauth", req.url));
+  if (!code || !stateRaw) return redirectTo("/app/settings/platforms?error=oauth");
   const state = JSON.parse(Buffer.from(stateRaw, "base64url").toString());
   const redirectUri = oauthRedirect(provider);
   let accessToken = "";
@@ -84,7 +84,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ provider
       handle = "google";
     }
   } catch {
-    return NextResponse.redirect(new URL("/app/settings/accounts?error=oauth_exchange", req.url));
+    return redirectTo("/app/settings/platforms?error=oauth_exchange");
   }
 
   await prisma.socialAccount.create({
@@ -99,5 +99,5 @@ export async function GET(req: Request, { params }: { params: Promise<{ provider
       status: "connected",
     },
   });
-  return NextResponse.redirect(new URL("/app/settings/accounts", req.url));
+  return redirectTo("/app/settings/platforms?connected=1");
 }

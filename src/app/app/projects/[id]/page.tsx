@@ -4,12 +4,15 @@ import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { projectAnalytics } from "@/lib/analytics";
 import { listenNowAction } from "@/lib/actions";
-import { Badge, Card, SentimentPill } from "@/components/ui";
-import { formatNumber } from "@/lib/utils";
+import { ChartBlock, PageHeader } from "@/components/ui";
+import { MentionCard } from "@/components/mention-card";
 import { VolumeChart } from "@/components/charts";
+import { formatNumber } from "@/lib/utils";
+import { t } from "@/lib/i18n";
 
 export default async function ProjectOverview({ params }: { params: Promise<{ id: string }> }) {
   const session = await requireSession();
+  const locale = session.locale === "ar" ? "ar" : "en";
   const { id } = await params;
   const project = await prisma.project.findFirst({
     where: { id, workspaceId: session.workspaceId },
@@ -25,72 +28,55 @@ export default async function ProjectOverview({ params }: { params: Promise<{ id
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="text-xs uppercase tracking-wide text-muted">Project</p>
-          <h1 className="text-2xl font-semibold">{project.name}</h1>
-          <p className="text-sm text-muted">{project.keywords.map((k) => k.phrase).join(" · ")}</p>
-        </div>
-        <div className="flex gap-2">
-          <form action={listenNowAction.bind(null, project.id)}>
-            <button className="rounded-xl bg-accent px-3 py-2 text-sm font-semibold text-bg">Listen now</button>
-          </form>
-          <Link href={`/app/projects/${project.id}/mentions`} className="rounded-xl border border-line px-3 py-2 text-sm">Mentions</Link>
-          <Link href={`/app/projects/${project.id}/analytics`} className="rounded-xl border border-line px-3 py-2 text-sm">Analytics</Link>
-          <Link href={`/app/projects/${project.id}/alerts`} className="rounded-xl border border-line px-3 py-2 text-sm">Alerts</Link>
-        </div>
-      </div>
+      <PageHeader
+        title={project.name}
+        description={project.keywords.map((k) => k.phrase).join(" · ") || (locale === "ar" ? "لا كلمات مراقبة بعد" : "No watch words yet")}
+        actions={
+          <>
+            <form action={listenNowAction.bind(null, project.id)}>
+              <button className="rounded-xl bg-accent px-3 py-2 text-sm font-semibold text-accent-ink">{t(locale, "listenNow")}</button>
+            </form>
+            <Link href={`/app/mentions?brand=${project.id}`} className="rounded-xl border border-line px-3 py-2 text-sm">{t(locale, "mentions")}</Link>
+            <Link href={`/app/analytics?brand=${project.id}`} className="rounded-xl border border-line px-3 py-2 text-sm">{t(locale, "analytics")}</Link>
+            <Link href={`/app/alerts?brand=${project.id}`} className="rounded-xl border border-line px-3 py-2 text-sm">{t(locale, "alerts")}</Link>
+          </>
+        }
+      />
       {project.warnings.length > 0 && (
-        <Card className="border-warn/40">
-          <p className="text-sm font-medium text-warn">Connector notices</p>
+        <div className="card border-warn/40 p-5">
+          <p className="text-sm font-medium text-warn">{locale === "ar" ? "ملاحظات المنصات" : "Platform notes"}</p>
           <ul className="mt-2 space-y-1 text-sm text-muted">
             {project.warnings.map((w) => (
-              <li key={w.id}>{w.source}: {w.message}</li>
+              <li key={w.id}>{w.message}</li>
             ))}
           </ul>
-        </Card>
+        </div>
       )}
       <div className="grid gap-4 sm:grid-cols-3">
-        <Card><p className="text-xs text-muted">Volume</p><p className="text-3xl font-semibold">{formatNumber(stats.totals.volume, session.locale)}</p></Card>
-        <Card><p className="text-xs text-muted">Reach</p><p className="text-3xl font-semibold">{formatNumber(stats.totals.reach, session.locale)}</p></Card>
-        <Card><p className="text-xs text-muted">Engagement</p><p className="text-3xl font-semibold">{formatNumber(stats.totals.engagement, session.locale)}</p></Card>
+        <div className="card p-5">
+          <p className="text-xs text-muted">{locale === "ar" ? "إشارات هذا الأسبوع" : "Mentions this week"}</p>
+          <p className="text-3xl font-semibold">{formatNumber(stats.totals.volume, locale)}</p>
+        </div>
+        <div className="card p-5">
+          <p className="text-xs text-muted">{locale === "ar" ? "مدى الوصول التقريبي" : "Approximate reach"}</p>
+          <p className="text-3xl font-semibold">{formatNumber(stats.totals.reach, locale)}</p>
+        </div>
+        <div className="card p-5">
+          <p className="text-xs text-muted">{locale === "ar" ? "تفاعل" : "Engagement"}</p>
+          <p className="text-3xl font-semibold">{formatNumber(stats.totals.engagement, locale)}</p>
+        </div>
       </div>
-      <Card>
-        <h2 className="mb-3 font-semibold">Volume and sentiment</h2>
+      <ChartBlock
+        title={locale === "ar" ? "الإشارات والمزاج" : "Mentions and mood"}
+        explanation={locale === "ar" ? "كيف تحرك الحديث هذا الأسبوع." : "How conversation moved this week."}
+      >
         <VolumeChart data={stats.series} />
-      </Card>
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <h2 className="mb-3 font-semibold">Latest mentions</h2>
-          <div className="space-y-3">
-            {mentions.map((m) => (
-              <a key={m.id} href={m.url} target="_blank" rel="noreferrer" className="block rounded-xl border border-line p-3 hover:bg-bg-soft">
-                <div className="flex items-center justify-between text-xs text-muted">
-                  <span>{m.source} · {m.authorName || m.authorHandle || "unknown"}</span>
-                  <SentimentPill value={m.sentiment} />
-                </div>
-                <p dir="auto" lang={m.language ?? undefined} className="rtl-content mt-1 line-clamp-3 text-sm">{m.title || m.content}</p>
-              </a>
-            ))}
-          </div>
-        </Card>
-        <Card>
-          <h2 className="mb-3 font-semibold">Share of voice</h2>
-          <div className="space-y-2">
-            {stats.shareOfVoice.map((row) => (
-              <div key={row.phrase} className="flex items-center justify-between text-sm">
-                <span>{row.phrase}</span>
-                <Badge tone="accent">{Math.round(row.share * 100)}%</Badge>
-              </div>
-            ))}
-            {stats.topics.slice(0, 6).map((t) => (
-              <div key={t.topic} className="flex items-center justify-between text-sm text-muted">
-                <span>#{t.topic}</span>
-                <span>{t.count}</span>
-              </div>
-            ))}
-          </div>
-        </Card>
+      </ChartBlock>
+      <div className="space-y-3">
+        <h2 className="font-semibold">{locale === "ar" ? "آخر الإشارات" : "Latest mentions"}</h2>
+        {mentions.map((mention) => (
+          <MentionCard key={mention.id} mention={mention} locale={locale} />
+        ))}
       </div>
     </div>
   );

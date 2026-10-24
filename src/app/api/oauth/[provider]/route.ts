@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { env, oauthRedirect } from "@/lib/config";
 import { requireSession } from "@/lib/auth";
+import { redirectTo } from "@/lib/redirects";
 
 const SCOPES: Record<string, string> = {
   meta: [
@@ -26,7 +27,7 @@ const SCOPES: Record<string, string> = {
   pinterest: "boards:read pins:read pins:write",
 };
 
-export async function GET(req: Request, { params }: { params: Promise<{ provider: string }> }) {
+export async function GET(_req: Request, { params }: { params: Promise<{ provider: string }> }) {
   const session = await requireSession();
   const { provider } = await params;
   const state = Buffer.from(JSON.stringify({ workspaceId: session.workspaceId, provider })).toString("base64url");
@@ -44,7 +45,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ provider
     return NextResponse.json({ error: `OAuth for ${provider} is documented but not wired in this environment` }, { status: 400 });
   }
   if (!url.includes("client_id=") || url.includes("client_id=&") || url.endsWith("client_id=")) {
-    return NextResponse.redirect(new URL("/app/settings/accounts?error=missing_oauth_env", req.url));
+    return redirectTo("/app/settings/platforms?error=missing_oauth_env");
   }
   return NextResponse.redirect(url);
 }

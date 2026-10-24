@@ -137,6 +137,7 @@ model Workspace {
   name        String
   slug        String          @unique
   timezone    String          @default("UTC")
+  onboardedAt DateTime?
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
   members     Membership[]

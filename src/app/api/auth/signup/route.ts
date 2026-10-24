@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
 import { signupUser } from "@/lib/auth";
+import { redirectTo } from "@/lib/redirects";
 
 export async function POST(req: Request) {
   const form = await req.formData();
@@ -8,11 +8,12 @@ export async function POST(req: Request) {
       name: String(form.get("name") ?? ""),
       email: String(form.get("email") ?? ""),
       password: String(form.get("password") ?? ""),
-      workspaceName: String(form.get("workspaceName") ?? "Workspace"),
+      workspaceName: String(form.get("workspaceName") ?? "My brand"),
       locale: String(form.get("locale") ?? "en"),
     });
-    return NextResponse.redirect(new URL("/app", req.url), 303);
+    return redirectTo("/app");
   } catch (error) {
-    return NextResponse.redirect(new URL(`/signup?error=${encodeURIComponent(error instanceof Error ? error.message : "Signup failed")}`, req.url), 303);
+    const message = error instanceof Error ? error.message : "We could not create your account.";
+    return redirectTo(`/signup?error=${encodeURIComponent(message)}`);
   }
 }

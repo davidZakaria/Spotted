@@ -3,51 +3,93 @@ export type Locale = "en" | "ar";
 const dict = {
   en: {
     product: "Spotted",
-    tagline: "Spotted everywhere",
+    tagline: "See every mention of your brand",
     signIn: "Sign in",
-    signUp: "Create workspace",
-    overview: "Overview",
+    signUp: "Create account",
+    signOut: "Sign out",
+    home: "Home",
     mentions: "Mentions",
     analytics: "Analytics",
     alerts: "Alerts",
     inbox: "Inbox",
-    publish: "Publisher",
+    publish: "Publish",
     reports: "Reports",
-    sources: "Sources",
+    platforms: "Connected platforms",
     settings: "Settings",
-    projects: "Projects",
-    newProject: "New project",
-    listenNow: "Listen now",
-    emptyMentions: "No mentions yet. Add keywords and run listening.",
-    unavailable: "Not permitted by this platform’s API",
-    budget: "API budget",
-    hashtagQuota: "Hashtag quota",
+    help: "How Spotted works",
+    brands: "Your brands",
+    newBrand: "Add a brand",
+    listenNow: "Find new mentions",
+    emptyMentions: "No mentions yet. Add words to watch and we will look for them.",
+    continue: "Continue",
+    back: "Back",
+    skip: "Skip for now",
+    save: "Save",
+    search: "Search",
+    positive: "Positive",
+    neutral: "Neutral",
+    negative: "Negative",
+    today: "today",
+    thisWeek: "this week",
+    openOriginal: "Open original",
+    darkMode: "Dark",
+    lightMode: "Light",
+    language: "Language",
+    demoHint: "Try the demo: demo@spotted.app / demo1234",
+    howItWorks: "How Spotted works",
   },
   ar: {
     product: "سبوتد",
-    tagline: "سبوتد في كل مكان",
+    tagline: "شاهد كل إشارة لعلامتك",
     signIn: "تسجيل الدخول",
-    signUp: "إنشاء مساحة عمل",
-    overview: "نظرة عامة",
+    signUp: "إنشاء حساب",
+    signOut: "تسجيل الخروج",
+    home: "الرئيسية",
     mentions: "الإشارات",
     analytics: "التحليلات",
     alerts: "التنبيهات",
     inbox: "الوارد",
     publish: "النشر",
     reports: "التقارير",
-    sources: "المصادر",
+    platforms: "المنصات المتصلة",
     settings: "الإعدادات",
-    projects: "المشاريع",
-    newProject: "مشروع جديد",
-    listenNow: "استمع الآن",
-    emptyMentions: "لا توجد إشارات بعد. أضف كلمات مفتاحية وشغّل الاستماع.",
-    unavailable: "غير مسموح به عبر واجهة هذه المنصة",
-    budget: "ميزانية الواجهة",
-    hashtagQuota: "حصة الهاشتاج",
+    help: "كيف يعمل سبوتد",
+    brands: "علاماتك",
+    newBrand: "إضافة علامة",
+    listenNow: "ابحث عن إشارات جديدة",
+    emptyMentions: "لا توجد إشارات بعد. أضف كلمات للمراقبة وسنبحث عنها.",
+    continue: "متابعة",
+    back: "رجوع",
+    skip: "تخطَّ الآن",
+    save: "حفظ",
+    search: "بحث",
+    positive: "إيجابي",
+    neutral: "محايد",
+    negative: "سلبي",
+    today: "اليوم",
+    thisWeek: "هذا الأسبوع",
+    openOriginal: "افتح الأصل",
+    darkMode: "داكن",
+    lightMode: "فاتح",
+    language: "اللغة",
+    demoHint: "جرّب العرض: demo@spotted.app / demo1234",
+    howItWorks: "كيف يعمل سبوتد",
   },
 } as const;
 
-export function t(locale: string, key: keyof (typeof dict)["en"]) {
+export type MessageKey = keyof (typeof dict)["en"];
+
+export function t(locale: string, key: MessageKey) {
   const pack = locale === "ar" ? dict.ar : dict.en;
   return pack[key];
+}
+
+export function isRtl(locale: string) {
+  return locale === "ar";
+}
+
+export function sentimentLabel(locale: string, value: string) {
+  if (value === "POSITIVE") return t(locale, "positive");
+  if (value === "NEGATIVE") return t(locale, "negative");
+  return t(locale, "neutral");
 }

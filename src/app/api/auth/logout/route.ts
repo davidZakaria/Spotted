@@ -1,7 +1,7 @@
-import { NextResponse } from "next/server";
 import { destroySession } from "@/lib/auth";
+import { redirectTo } from "@/lib/redirects";
 
-export async function POST(req: Request) {
+export async function POST() {
   await destroySession();
-  return NextResponse.redirect(new URL("/", req.url), 303);
+  return redirectTo("/");
 }

@@ -77,21 +77,64 @@ export async function projectAnalytics(projectId: string, days = 7) {
 }
 
 export async function workspaceOverview(workspaceId: string) {
-  const [projects, mentions, alerts, posts] = await Promise.all([
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const weekAgo = new Date(Date.now() - 7 * 86400000);
+  const [projects, mentions, todayMentions, alerts, posts, recent, sentimentRows] = await Promise.all([
     prisma.project.count({ where: { workspaceId, status: "ACTIVE" } }),
     prisma.mention.count({
-      where: { project: { workspaceId }, publishedAt: { gte: new Date(Date.now() - 7 * 86400000) } },
+      where: { project: { workspaceId }, publishedAt: { gte: weekAgo } },
+    }),
+    prisma.mention.count({
+      where: { project: { workspaceId }, publishedAt: { gte: startOfToday } },
     }),
     prisma.alert.count({ where: { project: { workspaceId }, enabled: true } }),
     prisma.scheduledPost.count({ where: { workspaceId, status: "SCHEDULED" } }),
+    prisma.mention.findMany({
+      where: { project: { workspaceId } },
+      orderBy: { publishedAt: "desc" },
+      take: 6,
+      include: { project: true },
+    }),
+    prisma.mention.groupBy({
+      by: ["sentiment"],
+      where: { project: { workspaceId }, publishedAt: { gte: weekAgo } },
+      _count: true,
+    }),
   ]);
-  const recent = await prisma.mention.findMany({
-    where: { project: { workspaceId } },
-    orderBy: { publishedAt: "desc" },
-    take: 6,
-    include: { project: true },
+  const sentiment = {
+    positive: sentimentRows.find((row) => row.sentiment === "POSITIVE")?._count ?? 0,
+    neutral: sentimentRows
+      .filter((row) => row.sentiment === "NEUTRAL" || row.sentiment === "UNKNOWN")
+      .reduce((sum, row) => sum + row._count, 0),
+    negative: sentimentRows.find((row) => row.sentiment === "NEGATIVE")?._count ?? 0,
+  };
+  const seriesMap = new Map<string, number>();
+  const weekMentions = await prisma.mention.findMany({
+    where: { project: { workspaceId }, publishedAt: { gte: weekAgo } },
+    select: { publishedAt: true, source: true },
   });
-  return { projects, mentions, alerts, posts, recent };
+  const sources = new Map<string, number>();
+  for (const mention of weekMentions) {
+    const day = mention.publishedAt.toISOString().slice(0, 10);
+    seriesMap.set(day, (seriesMap.get(day) ?? 0) + 1);
+    sources.set(mention.source, (sources.get(mention.source) ?? 0) + 1);
+  }
+  const series = [...seriesMap.entries()]
+    .map(([date, volume]) => ({ date, volume }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const topSource = [...sources.entries()].sort((a, b) => b[1] - a[1])[0] ?? null;
+  return {
+    projects,
+    mentions,
+    todayMentions,
+    alerts,
+    posts,
+    recent,
+    sentiment,
+    series,
+    topSource,
+  };
 }
 
 void Prisma;

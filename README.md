@@ -1,6 +1,8 @@
-# Spotted everywhere
+# Spotted
 
-Social listening and publishing platform inspired by Brand24 and Hootsuite. Multi-tenant workspaces, pluggable connectors, sentiment (including Arabic), alerts, a unified inbox, a publishing calendar, and PDF/CSV reports.
+See every mention of your brand, understand the mood, and reply from one place. Built for marketers — Home speaks in plain sentences, setup is a five-step wizard, and technical jargon stays out of the interface.
+
+Inspired by Brand24 and Hootsuite. Workspaces, listening across public sites, sentiment (including Arabic / RTL), alerts, a unified inbox, a publishing calendar, and PDF/CSV reports.
 
 ## Quick start (Docker Compose)
 
@@ -32,17 +34,16 @@ npm test
 
 ## What you can do
 
-1. Sign up (or use the demo user) and land in a workspace with roles.
-2. Create a keyword project. Keyless sources listen immediately.
-3. Open the project to see real mentions, sentiment, volume/reach charts, share of voice, and topics.
-4. Create a spike or keyword alert (email and/or Slack).
-5. Schedule a post on the calendar — uses a mock X account when nothing is connected.
-6. Export CSV or PDF reports.
-7. Switch the UI to العربية. Mention cards use `dir="auto"` so Arabic renders RTL.
+1. Sign up (or use the demo). First login opens a setup wizard: name your brand, add watch words, add competitors, pick platforms, see first results.
+2. Home summarizes the day: new mentions, mood, and the biggest spike — in plain language.
+3. Mentions, Analytics, Alerts, Publish, Inbox, Reports, and Settings are in the sidebar with short labels.
+4. Connected platforms shows what works now versus what needs a login, with step-by-step help.
+5. Switch English / العربية. Dark and light themes. Arabic mention text renders right-to-left.
+6. Schedule a post (a practice account is used until you connect a real one) and export a spreadsheet or PDF.
 
 ## Connectors
 
-Every source implements the same interface: keyword/hashtag/mention listening, public account/competitor tracking, comments and engagement, plus owned-account OAuth (publish, inbox, reply, own analytics) **as far as that platform’s official API allows**. The Sources page and the table below mark capabilities that the vendor does not permit. Those are API limits, not unfinished stubs.
+Every source implements the same interface: keyword/hashtag/mention listening, public account/competitor tracking, comments and engagement, plus owned-account OAuth (publish, inbox, reply, own analytics) **as far as that platform’s official API allows**. Connected platforms and the table below mark limits the vendor does not permit. Those are API limits, not unfinished stubs.
 
 | Source | Listening without keys | Needs | Important API limits |
 | --- | --- | --- | --- |
@@ -83,11 +84,11 @@ Set `WEB_SEARCH_PROVIDER=brave` (default) with `BRAVE_SEARCH_API_KEY`, or `WEB_S
 
 ### X usage budgets
 
-X is pay-per-use. Each call is recorded (`ApiUsage`) with an estimated USD cost (default $0.005, editable). Settings → Sources lets you set daily calls, monthly calls, and a monthly spend cap. When a cap is hit, X ingest stops and a project warning is stored instead of running up the bill.
+X is pay-per-use. Each call is recorded (`ApiUsage`) with an estimated USD cost (default $0.005, editable). Settings → Connected platforms lets you set daily searches, monthly searches, and a monthly spend cap. When a cap is hit, X listening stops and a brand warning is stored instead of running up the bill.
 
 ### Instagram hashtag quota
 
-Meta allows **30 unique hashtags per rolling 7 days per Instagram account**. Reusing a hashtag already counted in the window does not consume quota. Spotted records each new hashtag, skips extras, and surfaces remaining quota on the Sources page and as a project warning.
+Meta allows **30 unique hashtags per rolling 7 days per Instagram account**. Reusing a hashtag already counted in the window does not consume quota. Spotted records each new hashtag, skips extras, and surfaces remaining quota on Connected platforms and as a brand warning.
 
 ## Meta app review (Facebook + Instagram)
 
@@ -132,7 +133,9 @@ See `.env.example` for the full list. Grouped:
 
 | Group | Variables |
 | --- | --- |
-| Core | `DATABASE_URL`, `REDIS_URL`, `APP_URL`, `AUTH_SECRET` |
+| Core | `DATABASE_URL`, `REDIS_URL`, `APP_URL`, `NEXT_PUBLIC_APP_URL`, `AUTH_SECRET` |
+
+Login, signup, and logout redirects are built from `APP_URL` / `NEXT_PUBLIC_APP_URL`, never from the incoming request host. Set both to the public URL people type in the browser.
 | Sentiment | `OPENAI_API_KEY`, `OPENAI_MODEL` (local EN+AR lexicon if unset) |
 | Alerts | `SMTP_*`, `SLACK_WEBHOOK_URL` |
 | Web search | `WEB_SEARCH_PROVIDER`, `BRAVE_SEARCH_API_KEY`, `SERPAPI_API_KEY` |
@@ -159,7 +162,7 @@ Next.js 16 (App Router) · TypeScript · Tailwind 4 · Prisma 6 · Postgres · R
 npm test
 ```
 
-Covers language/RTL detection, English and Arabic sentiment, the connector capability catalog (including LinkedIn/TikTok limits, IG quota copy, Brave vs CSE), topic extraction, and config defaults.
+Covers language/RTL detection, English and Arabic sentiment, the connector capability catalog (including LinkedIn/TikTok limits, IG quota copy, Brave vs CSE), topic extraction, Home insight copy, and APP_URL auth redirects.
 
 ## Architecture
 

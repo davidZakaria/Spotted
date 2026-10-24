@@ -40,7 +40,7 @@ export const SOURCE_CATALOG: SourceMeta[] = [
     ],
     notes: [
       "X API is pay-per-use. Spotted records every call and blocks a source when the workspace daily/monthly call or spend budget is hit.",
-      "Default seeded budget: 50 calls/day, 500/month, $25 spend cap, $0.005 estimated per call (override in Settings → Sources).",
+      "Default seeded budget: 50 calls/day, 500/month, $25 spend cap, $0.005 estimated per call (override in Settings → Connected platforms).",
     ],
   },
   {

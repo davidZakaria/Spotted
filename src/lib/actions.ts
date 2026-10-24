@@ -60,6 +60,9 @@ export async function listenNowAction(projectId: string) {
   if (!queued) await ingestProject(projectId);
   await evaluateAlerts(projectId);
   revalidatePath(`/app/projects/${projectId}`);
+  revalidatePath("/app");
+  revalidatePath("/app/mentions");
+  revalidatePath("/app/analytics");
 }
 
 export async function createAlertAction(formData: FormData) {
@@ -80,6 +83,7 @@ export async function createAlertAction(formData: FormData) {
     },
   });
   revalidatePath(`/app/projects/${projectId}/alerts`);
+  revalidatePath("/app/alerts");
 }
 
 export async function schedulePostAction(formData: FormData) {
@@ -180,7 +184,7 @@ export async function updateBudgetAction(formData: FormData) {
       costPerCallUsd: 0.005,
     },
   });
-  revalidatePath("/app/settings/sources");
+  revalidatePath("/app/settings/platforms");
 }
 
 export async function generateReportAction(formData: FormData) {
@@ -232,4 +236,38 @@ export async function setLocaleAction(locale: "en" | "ar") {
   const session = await requireSession();
   await prisma.user.update({ where: { id: session.id }, data: { locale } });
   revalidatePath("/app");
+}
+
+export async function completeOnboardingAction(formData: FormData) {
+  const session = await requireSession();
+  if (!canEdit(session.role)) throw new Error("You need editor access");
+  const name = String(formData.get("name") ?? "").trim();
+  const phrases = parseCsvList(String(formData.get("keywords") ?? ""));
+  const sources = formData
+    .getAll("sources")
+    .map(String)
+    .filter((s): s is Source => Object.values(Source).includes(s as Source));
+  if (!name) throw new Error("Give your brand a name");
+  if (!phrases.length) throw new Error("Add at least one word to watch");
+  const project = await prisma.project.create({
+    data: {
+      name,
+      description: "Created from the first-time setup",
+      workspaceId: session.workspaceId,
+      config: {
+        sources: sources.length ? sources : KEYLESS_DEFAULTS,
+        competitors: parseCsvList(String(formData.get("competitors") ?? "")),
+        webSearchProvider: "brave",
+      },
+      keywords: { create: phrases.map((phrase) => ({ phrase })) },
+    },
+  });
+  await prisma.workspace.update({
+    where: { id: session.workspaceId },
+    data: { onboardedAt: new Date() },
+  });
+  const queued = await enqueue("ingest-project", { projectId: project.id });
+  if (!queued) await ingestProject(project.id);
+  revalidatePath("/app");
+  redirect(`/app?welcome=1`);
 }
