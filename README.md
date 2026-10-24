@@ -1,4 +1,4 @@
-# Aether
+# Spotted everywhere
 
 Social listening and publishing platform inspired by Brand24 and Hootsuite. Multi-tenant workspaces, pluggable connectors, sentiment (including Arabic), alerts, a unified inbox, a publishing calendar, and PDF/CSV reports.
 
@@ -12,15 +12,15 @@ docker compose up --build
 
 Open [http://localhost:4721](http://localhost:4721).
 
-**Demo login:** `demo@aether.app` / `demo1234`
+**Demo login:** `demo@spotted.app` / `demo1234`
 
-Compose starts Postgres, Redis, the Next.js app, and the BullMQ worker. On first boot it migrates and seeds a workspace, a keyword project, an alert, a mock X account, a scheduled post, and live mentions from keyless sources.
+Compose starts `spotted-db`, `spotted-redis`, `spotted-web`, and `spotted-worker`. On first boot it migrates and seeds a workspace, a keyword project, an alert, a mock X account, a scheduled post, and live mentions from keyless sources.
 
 ## Local development
 
 ```bash
 cp .env.example .env
-# DATABASE_URL=postgresql://aether:aether@127.0.0.1:5432/aether
+# DATABASE_URL=postgresql://spotted:spotted@127.0.0.1:5432/spotted
 # REDIS_URL=redis://127.0.0.1:6379
 # APP_URL=http://127.0.0.1:4721
 npx prisma migrate dev
@@ -77,7 +77,7 @@ Every source implements the same interface: keyword/hashtag/mention listening, p
 
 ### Web search providers
 
-Google Custom Search JSON API is **closed to new customers** and **shuts down 1 January 2027**. Aether does not use it.
+Google Custom Search JSON API is **closed to new customers** and **shuts down 1 January 2027**. Spotted does not use it.
 
 Set `WEB_SEARCH_PROVIDER=brave` (default) with `BRAVE_SEARCH_API_KEY`, or `WEB_SEARCH_PROVIDER=serpapi` with `SERPAPI_API_KEY`. The project can override the provider. Quora/forum listening uses the same provider with a `site:` filter.
 
@@ -87,7 +87,7 @@ X is pay-per-use. Each call is recorded (`ApiUsage`) with an estimated USD cost 
 
 ### Instagram hashtag quota
 
-Meta allows **30 unique hashtags per rolling 7 days per Instagram account**. Reusing a hashtag already counted in the window does not consume quota. Aether records each new hashtag, skips extras, and surfaces remaining quota on the Sources page and as a project warning.
+Meta allows **30 unique hashtags per rolling 7 days per Instagram account**. Reusing a hashtag already counted in the window does not consume quota. Spotted records each new hashtag, skips extras, and surfaces remaining quota on the Sources page and as a project warning.
 
 ## Meta app review (Facebook + Instagram)
 

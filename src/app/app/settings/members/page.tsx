@@ -13,7 +13,7 @@ export default async function MembersPage() {
     <div className="grid gap-6 lg:grid-cols-2">
       <div>
         <h1 className="text-2xl font-semibold">Members</h1>
-        <p className="mb-4 text-sm text-muted">Roles: owner, admin, editor, viewer. The person you invite must already have an Aether login.</p>
+        <p className="mb-4 text-sm text-muted">Roles: owner, admin, editor, viewer. The person you invite must already have a Spotted login.</p>
         <Card>
           <form action={inviteMemberAction} className="space-y-3">
             <Field label="Email"><input name="email" type="email" required /></Field>

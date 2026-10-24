@@ -21,7 +21,7 @@ export async function getJson<T = unknown>(
       signal: ctrl.signal,
       headers: {
         "User-Agent":
-          "Mozilla/5.0 (compatible; AetherListener/1.0; +https://github.com/aether) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
+          "Mozilla/5.0 (compatible; SpottedListener/1.0; +https://github.com/davidZakaria/Spotted) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
         Accept: "application/json",
         ...(rest.headers ?? {}),
       },
@@ -38,7 +38,7 @@ export async function getText(url: string, init: RequestInit = {}) {
   const res = await fetch(url, {
     ...init,
     headers: {
-      "User-Agent": "AetherSocial/1.0 (listening platform)",
+      "User-Agent": "SpottedSocial/1.0 (listening platform)",
       ...(init.headers ?? {}),
     },
   });

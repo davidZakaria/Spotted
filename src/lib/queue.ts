@@ -19,7 +19,7 @@ export function getRedis() {
 
 export function getQueue() {
   if (!queue) {
-    queue = new Queue("aether", { connection: getRedis() });
+    queue = new Queue("spotted", { connection: getRedis() });
   }
   return queue;
 }
@@ -54,7 +54,7 @@ export async function runJob(name: JobName, data: Record<string, string> = {}) {
 
 export function startWorker() {
   return new Worker(
-    "aether",
+    "spotted",
     async (job: Job) => runJob(job.name as JobName, job.data ?? {}),
     { connection: getRedis() },
   );

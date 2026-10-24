@@ -10,7 +10,7 @@ export function envFlag(name: string, fallback = false) {
 
 export const appConfig = {
   url: env("APP_URL", "http://127.0.0.1:4721"),
-  authSecret: env("AUTH_SECRET", "aether-dev-secret-change-in-production-please"),
+  authSecret: env("AUTH_SECRET", "spotted-dev-secret-change-in-production-please"),
   redisUrl: env("REDIS_URL", "redis://127.0.0.1:6379"),
   webSearchProvider: (env("WEB_SEARCH_PROVIDER", "brave") === "serpapi"
     ? "serpapi"

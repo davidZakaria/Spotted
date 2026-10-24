@@ -8,13 +8,13 @@ export default async function LoginPage() {
     <div className="grid min-h-screen place-items-center px-4">
       <form action="/api/auth/login" method="post" className="card w-full max-w-md space-y-4 p-8">
         <div>
-          <p className="text-xs uppercase tracking-widest text-accent">Aether</p>
+          <p className="text-xs uppercase tracking-widest text-accent">Spotted everywhere</p>
           <h1 className="mt-1 text-2xl font-semibold">Sign in</h1>
-          <p className="mt-1 text-sm text-muted">Demo: demo@aether.app / demo1234</p>
+          <p className="mt-1 text-sm text-muted">Demo: demo@spotted.app / demo1234</p>
         </div>
         <label className="block text-sm">
           Email
-          <input name="email" type="email" required defaultValue="demo@aether.app" className="mt-1" />
+          <input name="email" type="email" required defaultValue="demo@spotted.app" className="mt-1" />
         </label>
         <label className="block text-sm">
           Password

@@ -10,7 +10,7 @@ export async function fetchTrends(keyword: string, fallback: { date: string; vol
           requestOptions: { property: "", backend: "CM", category: 0 },
         }),
       )}`,
-      { headers: { "User-Agent": "AetherSocial/1.0" } },
+      { headers: { "User-Agent": "SpottedSocial/1.0" } },
     );
     if (res.ok) {
       const text = await res.text();

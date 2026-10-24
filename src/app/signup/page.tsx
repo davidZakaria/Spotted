@@ -8,7 +8,7 @@ export default async function SignupPage() {
     <div className="grid min-h-screen place-items-center px-4">
       <form action="/api/auth/signup" method="post" className="card w-full max-w-md space-y-4 p-8">
         <div>
-          <p className="text-xs uppercase tracking-widest text-accent">Aether</p>
+          <p className="text-xs uppercase tracking-widest text-accent">Spotted everywhere</p>
           <h1 className="mt-1 text-2xl font-semibold">Create a workspace</h1>
           <p className="mt-1 text-sm text-muted">Multi-tenant from the first account. Invite teammates later.</p>
         </div>

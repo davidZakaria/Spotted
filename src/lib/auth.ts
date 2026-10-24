@@ -7,7 +7,7 @@ import { prisma } from "./db";
 import { appConfig } from "./config";
 import { uniqueSlug } from "./utils";
 
-const COOKIE = "aether_session";
+const COOKIE = "spotted_session";
 const secret = () => new TextEncoder().encode(appConfig.authSecret);
 
 export async function hashPassword(password: string) {

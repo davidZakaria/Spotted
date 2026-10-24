@@ -105,7 +105,7 @@ export const googleTrendsConnector: Connector = {
           property: "",
         }),
       )}`;
-      await fetch(url, { headers: { "User-Agent": "AetherSocial/1.0" } });
+      await fetch(url, { headers: { "User-Agent": "SpottedSocial/1.0" } });
     } catch {
       // ignore
     }

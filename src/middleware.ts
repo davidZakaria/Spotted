@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 export function middleware(req: NextRequest) {
-  const session = req.cookies.get("aether_session")?.value;
+  const session = req.cookies.get("spotted_session")?.value;
   if (!session) {
     const url = req.nextUrl.clone();
     url.pathname = "/login";

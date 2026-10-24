@@ -20,7 +20,7 @@ export const podcastsConnector: Connector = {
       const auth = crypto.createHash("sha1").update(key + secret + now).digest("hex");
       const data = await getJson<{ feeds?: { id: number; title?: string; description?: string; url?: string; author?: string; newestItemPubdate?: number }[] }>(
         `https://api.podcastindex.org/api/1.0/search/byterm?q=${encodeURIComponent(ctx.query)}`,
-        { headers: { "X-Auth-Date": now, "X-Auth-Key": key, Authorization: auth, "User-Agent": "AetherSocial/1.0" } },
+      { headers: { "X-Auth-Date": now, "X-Auth-Key": key, Authorization: auth, "User-Agent": "SpottedSocial/1.0" } },
       );
       return (data.feeds ?? []).map((f) => ({
         source: "PODCASTS" as const,

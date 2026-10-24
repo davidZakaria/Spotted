@@ -19,7 +19,7 @@ async function notify(channel: "EMAIL" | "SLACK" | "BOTH", subject: string, body
         auth: env("SMTP_USER") ? { user: env("SMTP_USER"), pass: env("SMTP_PASS") } : undefined,
       });
       await transport.sendMail({
-        from: env("SMTP_FROM", "Aether <alerts@localhost>"),
+        from: env("SMTP_FROM", "Spotted <alerts@localhost>"),
         to: emailTo,
         subject,
         text: body,
@@ -48,7 +48,7 @@ export async function evaluateAlerts(projectId?: string) {
         const summary = `${alert.project.name}: ${count} mentions in the last ${alert.windowMinutes} minutes (threshold ${threshold}).`;
         await prisma.alertEvent.create({ data: { alertId: alert.id, summary, payload: { count, threshold } } });
         await prisma.alert.update({ where: { id: alert.id }, data: { lastFiredAt: new Date() } });
-        await notify(alert.channel, `Aether spike: ${alert.name}`, summary, alert.emailTo, alert.slackWebhook);
+        await notify(alert.channel, `Spotted spike: ${alert.name}`, summary, alert.emailTo, alert.slackWebhook);
         fired += 1;
       }
     } else if (alert.type === "KEYWORD" && alert.keyword) {
@@ -68,7 +68,7 @@ export async function evaluateAlerts(projectId?: string) {
         const summary = `${alert.project.name}: ${matches.length} new mentions contain “${alert.keyword}”.`;
         await prisma.alertEvent.create({ data: { alertId: alert.id, summary, payload: { ids: matches.map((m) => m.id) } } });
         await prisma.alert.update({ where: { id: alert.id }, data: { lastFiredAt: new Date() } });
-        await notify(alert.channel, `Aether keyword: ${alert.name}`, summary, alert.emailTo, alert.slackWebhook);
+        await notify(alert.channel, `Spotted keyword: ${alert.name}`, summary, alert.emailTo, alert.slackWebhook);
         fired += 1;
       }
     }
@@ -86,7 +86,7 @@ export async function sendDigests() {
     };
     const count = await prisma.mention.count({ where });
     const body = `Digest for ${digest.project?.name ?? digest.workspace.name}: ${count} new mentions since ${since.toISOString()}.`;
-    await notify(digest.channel, "Aether digest", body, digest.emailTo, digest.slackWebhook);
+    await notify(digest.channel, "Spotted digest", body, digest.emailTo, digest.slackWebhook);
     await prisma.digest.update({ where: { id: digest.id }, data: { lastSentAt: new Date() } });
   }
 }

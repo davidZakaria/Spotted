@@ -12,6 +12,7 @@ import {
 import type { SessionUser } from "@/lib/auth";
 import { t as tr } from "@/lib/i18n";
 import { setLocaleAction } from "@/lib/actions";
+import { BrandMark } from "@/components/brand";
 
 const links = [
   { href: "/app", key: "overview" as const, icon: LayoutDashboard },
@@ -34,9 +35,8 @@ export function Shell({
   return (
     <div className="flex min-h-screen" dir={locale === "ar" ? "rtl" : "ltr"}>
       <aside className="hidden w-60 shrink-0 border-line bg-bg-elev/80 p-4 md:flex md:flex-col md:border-e">
-        <Link href="/app" className="mb-6 flex items-center gap-2 px-2 text-lg font-semibold">
-          <span className="grid h-8 w-8 place-items-center rounded-lg bg-accent text-bg">A</span>
-          {tr(locale, "product")}
+        <Link href="/app" className="mb-6 px-2">
+          <BrandMark />
         </Link>
         <nav className="space-y-1 text-sm">
           {links.map((l) => (
@@ -59,7 +59,7 @@ export function Shell({
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-between border-b border-line px-4 py-3 md:px-8">
           <div className="flex items-center gap-2 text-sm text-muted md:hidden">
-            <Activity className="h-4 w-4 text-accent" /> Aether
+            <Activity className="h-4 w-4 text-accent" /> Spotted
           </div>
           <div className="ms-auto flex items-center gap-2">
             <form action={async () => {

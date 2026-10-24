@@ -9,7 +9,7 @@ async function main() {
     console.error(`[worker] ${job?.name} failed`, err);
   });
   await scheduleRepeats();
-  console.log("Aether worker listening on queue `aether`");
+  console.log("Spotted worker listening on queue `spotted`");
 }
 
 main().catch((error) => {

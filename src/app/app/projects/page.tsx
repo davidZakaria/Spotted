@@ -14,7 +14,7 @@ export default async function ProjectsPage() {
     return (
       <EmptyState
         title="No listening projects yet"
-        body="Create a keyword project. Aether will pull live mentions from Reddit, Hacker News, Google News, Bluesky, Mastodon, and RSS without API keys."
+        body="Create a keyword project. Spotted will pull live mentions from Reddit, Hacker News, Google News, Bluesky, Mastodon, and RSS without API keys."
         action={<Link href="/app/projects/new" className="rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-bg">New project</Link>}
       />
     );

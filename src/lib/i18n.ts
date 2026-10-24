@@ -2,8 +2,8 @@ export type Locale = "en" | "ar";
 
 const dict = {
   en: {
-    product: "Aether",
-    tagline: "Listen. Understand. Publish.",
+    product: "Spotted",
+    tagline: "Spotted everywhere",
     signIn: "Sign in",
     signUp: "Create workspace",
     overview: "Overview",
@@ -24,8 +24,8 @@ const dict = {
     hashtagQuota: "Hashtag quota",
   },
   ar: {
-    product: "أثير",
-    tagline: "استمع. افهم. انشر.",
+    product: "سبوتد",
+    tagline: "سبوتد في كل مكان",
     signIn: "تسجيل الدخول",
     signUp: "إنشاء مساحة عمل",
     overview: "نظرة عامة",

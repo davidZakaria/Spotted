@@ -7,7 +7,7 @@ const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"]
 const notoArabic = Noto_Sans_Arabic({ variable: "--font-noto-arabic", subsets: ["arabic"], weight: ["400", "600", "700"] });
 
 export const metadata: Metadata = {
-  title: "Aether — social listening and publishing",
+  title: "Spotted everywhere — social listening and publishing",
   description: "Monitor mentions, understand sentiment, and publish from one workspace.",
 };
 

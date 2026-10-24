@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-cert
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
-ENV DATABASE_URL=postgresql://aether:aether@postgres:5432/aether
+ENV DATABASE_URL=postgresql://spotted:spotted@spotted-db:5432/spotted
 ENV AUTH_SECRET=build-placeholder
 RUN npx prisma generate && npm run build
 

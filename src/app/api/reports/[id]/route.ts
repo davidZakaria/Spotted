@@ -15,7 +15,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   return new NextResponse(buf, {
     headers: {
       "Content-Type": type,
-      "Content-Disposition": `attachment; filename="aether-report.${report.format.toLowerCase()}"`,
+      "Content-Disposition": `attachment; filename="spotted-report.${report.format.toLowerCase()}"`,
     },
   });
 }

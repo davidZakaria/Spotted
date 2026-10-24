@@ -6,8 +6,12 @@ import { KEYLESS_DEFAULTS } from "../src/lib/connectors/registry";
 const prisma = new PrismaClient();
 
 async function main() {
-  const email = "demo@aether.app";
+  const email = "demo@spotted.app";
   const passwordHash = await hash("demo1234", 12);
+  await prisma.user.updateMany({
+    where: { email: "demo@aether.app" },
+    data: { email },
+  });
   const user = await prisma.user.upsert({
     where: { email },
     update: {},
@@ -98,7 +102,7 @@ async function main() {
         workspaceId: workspace.id,
         platform: Source.X,
         displayName: "Mock X account",
-        handle: "aether_demo",
+        handle: "spotted_demo",
         isMock: true,
         status: "mock",
       },
@@ -138,7 +142,7 @@ async function main() {
     });
   }
 
-  console.log("Seeded demo user demo@aether.app / demo1234");
+  console.log("Seeded demo user demo@spotted.app / demo1234");
   console.log("Ingesting live mentions (Reddit, HN, RSS, Google News, Bluesky, Mastodon, podcasts)…");
   try {
     const result = await ingestProject(project.id);

@@ -101,7 +101,7 @@ export async function schedulePostAction(formData: FormData) {
           workspaceId: session.workspaceId,
           platform: "X",
           displayName: "Mock X account",
-          handle: "aether_demo",
+          handle: "spotted_demo",
           isMock: true,
           status: "mock",
         },

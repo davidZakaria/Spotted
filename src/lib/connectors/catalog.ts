@@ -39,7 +39,7 @@ export const SOURCE_CATALOG: SourceMeta[] = [
       cap("upload_media", true, "oauth"),
     ],
     notes: [
-      "X API is pay-per-use. Aether records every call and blocks a source when the workspace daily/monthly call or spend budget is hit.",
+      "X API is pay-per-use. Spotted records every call and blocks a source when the workspace daily/monthly call or spend budget is hit.",
       "Default seeded budget: 50 calls/day, 500/month, $25 spend cap, $0.005 estimated per call (override in Settings → Sources).",
     ],
   },
@@ -136,7 +136,7 @@ export const SOURCE_CATALOG: SourceMeta[] = [
     envVars: ["META_APP_ID", "META_APP_SECRET"],
     capabilities: [
       cap("keyword_search", false, "none", "No public keyword search of all posts."),
-      cap("hashtag_search", true, "oauth", "Hard limit: 30 unique hashtags / 7 days / IG account. Aether enforces and surfaces this."),
+      cap("hashtag_search", true, "oauth", "Hard limit: 30 unique hashtags / 7 days / IG account. Spotted enforces and surfaces this."),
       cap("mention_listen", true, "oauth"),
       cap("public_account_track", true, "oauth", "Business Discovery for professional accounts."),
       cap("competitor_track", true, "oauth", "Business Discovery only; no private/personal accounts."),
@@ -479,7 +479,7 @@ export const SOURCE_CATALOG: SourceMeta[] = [
       cap("upload_media", false, "none"),
     ],
     notes: [
-      "Google Custom Search JSON API is closed to new customers and shuts down 1 Jan 2027. Aether does not use it.",
+      "Google Custom Search JSON API is closed to new customers and shuts down 1 Jan 2027. Spotted does not use it.",
       "Set WEB_SEARCH_PROVIDER=brave (default) or serpapi.",
     ],
   },

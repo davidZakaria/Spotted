@@ -1,8 +1,8 @@
 {
-  "name": "aether",
+  "name": "spotted",
   "version": "1.0.0",
   "private": true,
-  "description": "Aether — social listening and publishing platform",
+  "description": "Spotted everywhere — social listening and publishing platform",
   "scripts": {
     "dev": "next dev -p 4721",
     "dev:worker": "tsx watch src/worker.ts",

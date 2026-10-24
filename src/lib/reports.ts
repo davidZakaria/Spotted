@@ -65,7 +65,7 @@ export async function buildPdfReport(projectId: string, from: Date, to: Date) {
     const doc = new PDFDocument({ margin: 48 });
     const stream = createWriteStream(filePath);
     doc.pipe(stream);
-    doc.fontSize(20).text("Aether listening report", { align: "left" });
+    doc.fontSize(20).text("Spotted listening report", { align: "left" });
     doc.moveDown(0.3);
     doc.fontSize(12).fillColor("#444").text(project?.name ?? projectId);
     doc.text(`${from.toISOString().slice(0, 10)} → ${to.toISOString().slice(0, 10)}`);

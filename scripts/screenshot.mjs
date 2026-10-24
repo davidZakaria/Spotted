@@ -24,7 +24,7 @@ await shot("landing");
 
 await page.goto("http://127.0.0.1:4721/login", { waitUntil: "networkidle0" });
 await page.evaluate(async () => {
-  const body = new URLSearchParams({ email: "demo@aether.app", password: "demo1234" });
+  const body = new URLSearchParams({ email: "demo@spotted.app", password: "demo1234" });
   await fetch("/api/auth/login", {
     method: "POST",
     body,
@@ -66,7 +66,7 @@ await shot("alerts");
 
 await page.goto("http://127.0.0.1:4721/app/publish", { waitUntil: "networkidle0" });
 await page.click("textarea[name=content]", { clickCount: 3 });
-await page.type("textarea[name=content]", "Aether screenshot check — scheduled from the calendar.");
+await page.type("textarea[name=content]", "Spotted screenshot check — scheduled from the calendar.");
 await page.click("button[type=submit]");
 await new Promise((r) => setTimeout(r, 1200));
 await shot("publisher");
