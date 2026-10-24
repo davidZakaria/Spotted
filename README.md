@@ -162,7 +162,7 @@ Next.js 16 (App Router) · TypeScript · Tailwind 4 · Prisma 6 · Postgres · R
 npm test
 ```
 
-Covers language/RTL detection, English and Arabic sentiment, the connector capability catalog (including LinkedIn/TikTok limits, IG quota copy, Brave vs CSE), topic extraction, Home insight copy, and APP_URL auth redirects.
+Covers language/RTL detection, English and Arabic sentiment, the connector capability catalog (including LinkedIn/TikTok limits, IG quota copy, Brave vs CSE), topic extraction, Home insight copy, APP_URL auth redirects, and a Prisma check that `schema.prisma` matches `prisma/migrations` (`npm run db:check`).
 
 ## Architecture
 
