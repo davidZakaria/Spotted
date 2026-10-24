@@ -1,0 +1,8 @@
+node_modules
+.next
+.git
+agent-tools
+reports
+coverage
+*.md
+.env

@@ -1,0 +1,417 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  EDITOR
+  VIEWER
+}
+
+enum ProjectStatus {
+  ACTIVE
+  PAUSED
+  ARCHIVED
+}
+
+enum MatchType {
+  CONTAINS
+  EXACT
+  PHRASE
+}
+
+enum Source {
+  REDDIT
+  HACKER_NEWS
+  RSS
+  YOUTUBE
+  X
+  FACEBOOK
+  INSTAGRAM
+  THREADS
+  LINKEDIN
+  TIKTOK
+  GOOGLE_NEWS
+  WEB_SEARCH
+  GOOGLE_ALERTS
+  GOOGLE_BUSINESS
+  GOOGLE_TRENDS
+  BLUESKY
+  MASTODON
+  PINTEREST
+  TELEGRAM
+  DISCORD
+  QUORA
+  TWITCH
+  PODCASTS
+  TRUSTPILOT
+  G2
+  APP_STORE
+  PLAY_STORE
+  SNAPCHAT
+}
+
+enum Sentiment {
+  POSITIVE
+  NEUTRAL
+  NEGATIVE
+  UNKNOWN
+}
+
+enum AlertType {
+  SPIKE
+  KEYWORD
+}
+
+enum AlertChannel {
+  EMAIL
+  SLACK
+  BOTH
+}
+
+enum PostStatus {
+  DRAFT
+  SCHEDULED
+  PUBLISHING
+  PUBLISHED
+  FAILED
+}
+
+enum InboxType {
+  COMMENT
+  MENTION
+  MESSAGE
+  REVIEW
+  REACTION
+  TAG
+}
+
+enum InboxStatus {
+  UNREAD
+  READ
+  REPLIED
+  ARCHIVED
+}
+
+enum DigestCadence {
+  DAILY
+  WEEKLY
+}
+
+enum ReportFormat {
+  CSV
+  PDF
+}
+
+model User {
+  id           String       @id @default(cuid())
+  email        String       @unique
+  name         String
+  passwordHash String
+  image        String?
+  locale       String       @default("en")
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  memberships  Membership[]
+  sessions     Session[]
+  posts        ScheduledPost[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Workspace {
+  id          String          @id @default(cuid())
+  name        String
+  slug        String          @unique
+  timezone    String          @default("UTC")
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  members     Membership[]
+  projects    Project[]
+  accounts    SocialAccount[]
+  posts       ScheduledPost[]
+  inboxItems  InboxItem[]
+  reports     Report[]
+  digests     Digest[]
+  budgets     ConnectorBudget[]
+  usage       ApiUsage[]
+}
+
+model Membership {
+  id          String    @id @default(cuid())
+  role        Role      @default(EDITOR)
+  userId      String
+  workspaceId String
+  createdAt   DateTime  @default(now())
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, workspaceId])
+}
+
+model Project {
+  id          String        @id @default(cuid())
+  name        String
+  description String?
+  status      ProjectStatus @default(ACTIVE)
+  workspaceId String
+  config      Json          @default("{}")
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  keywords    Keyword[]
+  mentions    Mention[]
+  alerts      Alert[]
+  reports     Report[]
+  digests     Digest[]
+  entities    TrackedEntity[]
+  warnings    ConnectorWarning[]
+
+  @@index([workspaceId])
+}
+
+model Keyword {
+  id        String    @id @default(cuid())
+  phrase    String
+  matchType MatchType @default(CONTAINS)
+  language  String?
+  projectId String
+  createdAt DateTime  @default(now())
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  mentions  Mention[]
+}
+
+model Mention {
+  id            String    @id @default(cuid())
+  projectId     String
+  keywordId     String?
+  source        Source
+  externalId    String
+  url           String
+  title         String?
+  content       String
+  authorName    String?
+  authorHandle  String?
+  authorUrl     String?
+  publishedAt   DateTime
+  collectedAt   DateTime  @default(now())
+  language      String?
+  direction     String    @default("ltr")
+  reach         Int       @default(0)
+  engagement    Int       @default(0)
+  likeCount     Int       @default(0)
+  shareCount    Int       @default(0)
+  viewCount     Int       @default(0)
+  commentCount  Int       @default(0)
+  followerCount Int       @default(0)
+  kind          String    @default("post")
+  parentExternalId String?
+  sentiment     Sentiment @default(UNKNOWN)
+  sentimentScore Float?
+  topics        String[]
+  raw           Json?
+  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  keyword       Keyword?  @relation(fields: [keywordId], references: [id], onDelete: SetNull)
+
+  @@unique([projectId, source, externalId])
+  @@index([projectId, publishedAt])
+  @@index([projectId, sentiment])
+  @@index([projectId, source])
+}
+
+model Alert {
+  id             String       @id @default(cuid())
+  projectId      String
+  name           String
+  type           AlertType
+  keyword        String?
+  spikeThreshold Int?
+  windowMinutes  Int          @default(60)
+  channel        AlertChannel @default(EMAIL)
+  emailTo        String?
+  slackWebhook   String?
+  enabled        Boolean      @default(true)
+  lastFiredAt    DateTime?
+  createdAt      DateTime     @default(now())
+  project        Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  events         AlertEvent[]
+}
+
+model AlertEvent {
+  id        String   @id @default(cuid())
+  alertId   String
+  firedAt   DateTime @default(now())
+  summary   String
+  payload   Json?
+  alert     Alert    @relation(fields: [alertId], references: [id], onDelete: Cascade)
+}
+
+model SocialAccount {
+  id           String          @id @default(cuid())
+  workspaceId  String
+  platform     Source
+  displayName  String
+  handle       String
+  externalId   String?
+  accessToken  String?
+  refreshToken String?
+  expiresAt    DateTime?
+  scopes       String[]
+  metadata     Json?
+  isMock       Boolean         @default(false)
+  status       String          @default("connected")
+  createdAt    DateTime        @default(now())
+  workspace    Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  posts        ScheduledPost[]
+  inboxItems   InboxItem[]
+  hashtagUses  HashtagQuotaUse[]
+}
+
+model ScheduledPost {
+  id          String         @id @default(cuid())
+  workspaceId String
+  accountId   String?
+  platforms   Source[]
+  content     String
+  mediaUrls   String[]
+  scheduledAt DateTime
+  status      PostStatus     @default(SCHEDULED)
+  publishedAt DateTime?
+  error       String?
+  createdById String
+  createdAt   DateTime       @default(now())
+  workspace   Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  account     SocialAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  createdBy   User           @relation(fields: [createdById], references: [id], onDelete: Cascade)
+}
+
+model InboxItem {
+  id          String         @id @default(cuid())
+  workspaceId String
+  accountId   String?
+  platform    Source
+  externalId  String
+  type        InboxType
+  authorName  String
+  content     String
+  language    String?
+  direction   String         @default("ltr")
+  url         String?
+  receivedAt  DateTime
+  status      InboxStatus    @default(UNREAD)
+  sentiment   Sentiment?
+  createdAt   DateTime       @default(now())
+  workspace   Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  account     SocialAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+
+  @@unique([workspaceId, platform, externalId])
+}
+
+model Report {
+  id          String       @id @default(cuid())
+  workspaceId String
+  projectId   String?
+  name        String
+  format      ReportFormat
+  from        DateTime
+  to          DateTime
+  filePath    String?
+  createdAt   DateTime     @default(now())
+  workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project     Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
+}
+
+model Digest {
+  id           String        @id @default(cuid())
+  workspaceId  String
+  projectId    String?
+  cadence      DigestCadence @default(DAILY)
+  channel      AlertChannel  @default(EMAIL)
+  emailTo      String?
+  slackWebhook String?
+  enabled      Boolean       @default(true)
+  lastSentAt   DateTime?
+  createdAt    DateTime      @default(now())
+  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project      Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
+}
+
+model TrackedEntity {
+  id           String   @id @default(cuid())
+  projectId    String
+  source       Source
+  externalId   String
+  handle       String
+  displayName  String
+  kind         String
+  isCompetitor Boolean  @default(false)
+  metadata     Json?
+  createdAt    DateTime @default(now())
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, source, externalId])
+}
+
+model ConnectorBudget {
+  id                   String    @id @default(cuid())
+  workspaceId          String
+  source               Source
+  dailyCallLimit       Int       @default(200)
+  monthlyCallLimit     Int       @default(4000)
+  monthlySpendLimitUsd Float     @default(25)
+  costPerCallUsd       Float     @default(0)
+  enabled              Boolean   @default(true)
+  workspace            Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, source])
+}
+
+model ApiUsage {
+  id               String    @id @default(cuid())
+  workspaceId      String
+  source           Source
+  endpoint         String
+  units            Int       @default(1)
+  estimatedCostUsd Float     @default(0)
+  createdAt        DateTime  @default(now())
+  workspace        Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, source, createdAt])
+}
+
+model HashtagQuotaUse {
+  id        String        @id @default(cuid())
+  accountId String
+  source    Source
+  hashtag   String
+  usedAt    DateTime      @default(now())
+  account   SocialAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, source, usedAt])
+}
+
+model ConnectorWarning {
+  id        String   @id @default(cuid())
+  projectId String
+  source    Source
+  code      String
+  message   String
+  createdAt DateTime @default(now())
+  resolved  Boolean  @default(false)
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, resolved])
+}
