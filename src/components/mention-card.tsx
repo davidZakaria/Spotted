@@ -3,6 +3,7 @@ import { PlatformLogo, PlatformName } from "@/components/platform-logo";
 import { SentimentPill } from "@/components/ui";
 import { t } from "@/lib/i18n";
 import { truncate } from "@/lib/utils";
+import { HISTORY_SCAN_KIND, HISTORY_SCAN_LABEL, HISTORY_SCAN_LABEL_AR } from "@/lib/listen/backfill";
 
 type MentionLike = Pick<
   Mention,
@@ -42,6 +43,11 @@ export function MentionCard({
                   ? locale === "ar"
                     ? " (عبر جوجل)"
                     : " (via Google)"
+                  : null}
+                {mention.kind === HISTORY_SCAN_KIND
+                  ? locale === "ar"
+                    ? ` · ${HISTORY_SCAN_LABEL_AR}`
+                    : ` · ${HISTORY_SCAN_LABEL}`
                   : null}
               </span>
               {mention.project ? <span>· {mention.project.name}</span> : null}

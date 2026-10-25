@@ -9,6 +9,14 @@ import type { ProjectConfig, RawMention } from "../connectors/types";
 import { mentionMatches, ruleFromPhrase, searchQueries, type KeywordRule } from "../listen/query";
 import { searchQueryCap } from "../listen/forum-serp";
 import { dedupeMentions } from "../listen/dedupe";
+import {
+  BACKFILL_DAYS,
+  BACKFILL_SOURCES,
+  INGEST_DAYS,
+  lookbackSince,
+  markHistoryScan,
+} from "../listen/backfill";
+import { hasSerpApi, runSerpSearch } from "../listen/serpapi";
 
 export function mergeConnectedSources(
   sources: Source[],
@@ -101,6 +109,7 @@ export async function persistMentions(
         update: {
           content: mention.content.slice(0, 8000),
           keywordId: row.keywordId,
+          publishedAt: parsePublishedAt(mention.publishedAt),
           reach: mention.reach ?? 0,
           engagement: mention.engagement ?? 0,
           likeCount: mention.likeCount ?? 0,
@@ -119,7 +128,121 @@ export async function persistMentions(
   return { collected: rows.length, upserted };
 }
 
-export async function ingestProject(projectId: string) {
+type KeywordRow = {
+  keyword?: Keyword;
+  rule: KeywordRule;
+  queries: string[];
+};
+
+async function collectFromSources(input: {
+  projectId: string;
+  workspaceId: string;
+  config: ProjectConfig;
+  liveAccounts: { id: string; platform: Source; isMock: boolean; accessToken?: string | null; externalId?: string | null }[];
+  sources: Source[];
+  rows: KeywordRow[];
+  since: Date;
+  purpose: "scheduled" | "backfill";
+  history?: boolean;
+  includeTrackAccounts?: boolean;
+}) {
+  const collected: { mention: RawMention; keywordId?: string }[] = [];
+  for (const source of input.sources) {
+    const connector = getConnector(source);
+    if (!connector) continue;
+    const accounts = input.liveAccounts.filter((account) => account.platform === source && !account.isMock);
+    const passes = accounts.length ? accounts : [undefined];
+    try {
+      for (const account of passes) {
+        for (const { keyword, rule, queries } of input.rows) {
+          const searchTerms = queries.slice(0, searchQueryCap(source));
+          for (const query of searchTerms) {
+            const ctx = {
+              query,
+              language: rule.language ?? undefined,
+              country: rule.country ?? undefined,
+              since: input.since,
+              projectId: input.projectId,
+              workspaceId: input.workspaceId,
+              projectConfig: input.config,
+              accessToken: tokenOf(account?.accessToken),
+              accountId: account?.id,
+              accountExternalId: account?.externalId ?? undefined,
+              limit: input.purpose === "backfill" ? 50 : 40,
+              purpose: input.purpose,
+              keywordKey: keyword?.id ?? rule.phrase,
+            };
+            const found = await connector.search(ctx);
+            for (const mention of found) {
+              if (!mentionMatches(`${mention.title ?? ""} ${mention.content}`, rule)) continue;
+              mention.publishedAt = parsePublishedAt(mention.publishedAt);
+              if (isValidDate(mention.publishedAt) && mention.publishedAt < input.since) continue;
+              collected.push({
+                mention: input.history ? markHistoryScan(mention) : mention,
+                keywordId: keyword?.id,
+              });
+            }
+            if (input.includeTrackAccounts && connector.trackAccounts) {
+              const tracked = await connector.trackAccounts(ctx);
+              for (const mention of tracked) {
+                if (!mentionMatches(`${mention.title ?? ""} ${mention.content}`, rule)) continue;
+                collected.push({ mention, keywordId: keyword?.id });
+              }
+            }
+          }
+        }
+      }
+    } catch (error) {
+      await prisma.connectorWarning.create({
+        data: {
+          projectId: input.projectId,
+          source,
+          code: "ingest_error",
+          message: error instanceof Error ? error.message : "Ingest failed",
+        },
+      });
+    }
+  }
+  return collected;
+}
+
+async function collectBackfillSerp(input: {
+  projectId: string;
+  workspaceId: string;
+  row: KeywordRow;
+  since: Date;
+}) {
+  if (!hasSerpApi()) return [] as { mention: RawMention; keywordId?: string }[];
+  const serp = await runSerpSearch({
+    query: input.row.rule.phrase,
+    engine: "google",
+    purpose: "backfill",
+    workspaceId: input.workspaceId,
+    projectId: input.projectId,
+    keywordKey: input.row.keyword?.id ?? input.row.rule.phrase,
+    language: input.row.rule.language ?? undefined,
+    country: input.row.rule.country ?? undefined,
+    source: "WEB_SEARCH",
+    limit: 100,
+  });
+  const out: { mention: RawMention; keywordId?: string }[] = [];
+  for (const mention of serp.mentions) {
+    if (!mentionMatches(`${mention.title ?? ""} ${mention.content}`, input.row.rule)) continue;
+    mention.publishedAt = parsePublishedAt(mention.publishedAt);
+    if (isValidDate(mention.publishedAt) && mention.publishedAt < input.since) continue;
+    out.push({ mention: markHistoryScan(mention), keywordId: input.row.keyword?.id });
+  }
+  return out;
+}
+
+async function markKeywordBackfilled(keywordId: string) {
+  await prisma.keyword.update({ where: { id: keywordId }, data: { backfilledAt: new Date() } });
+}
+
+export async function ingestProject(
+  projectId: string,
+  opts: { forceBackfill?: boolean; keywordId?: string } = {},
+) {
   const project = await prisma.project.findUnique({
     where: { id: projectId },
     include: { keywords: true, entities: true, workspace: { include: { accounts: true } } },
@@ -160,66 +283,68 @@ export async function ingestProject(projectId: string) {
   }
 
   const collected: { mention: RawMention; keywordId?: string }[] = [];
-  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-  const keywordRules = project.keywords.length
+  const regularSince = lookbackSince(INGEST_DAYS);
+  const backfillSince = lookbackSince(BACKFILL_DAYS);
+  const keywordRules: KeywordRow[] = project.keywords.length
     ? project.keywords.map((keyword) => ({
         keyword,
         rule: ruleFromKeyword(keyword),
         queries: searchQueries(ruleFromKeyword(keyword)),
       }))
     : [{ keyword: undefined, rule: ruleFromPhrase(project.name), queries: searchQueries(ruleFromPhrase(project.name)) }];
+  const targeted = opts.keywordId
+    ? keywordRules.filter((row) => row.keyword?.id === opts.keywordId)
+    : keywordRules;
+  const shared = {
+    projectId: project.id,
+    workspaceId: project.workspaceId,
+    config,
+    liveAccounts,
+  };
 
-  for (const source of sources) {
-    const connector = getConnector(source);
-    if (!connector) continue;
-    const accounts = liveAccounts.filter((account) => account.platform === source && !account.isMock);
-    const passes = accounts.length ? accounts : [undefined];
-    try {
-      for (const account of passes) {
-        for (const { keyword, rule, queries } of keywordRules) {
-          const searchTerms = queries.slice(0, searchQueryCap(source));
-          for (const query of searchTerms) {
-            const ctx = {
-              query,
-              language: rule.language ?? undefined,
-              country: rule.country ?? undefined,
-              since,
-              projectId: project.id,
-              workspaceId: project.workspaceId,
-              projectConfig: config,
-              accessToken: tokenOf(account?.accessToken),
-              accountId: account?.id,
-              accountExternalId: account?.externalId ?? undefined,
-              limit: 40,
-              purpose: "scheduled" as const,
-              keywordKey: keyword?.id ?? rule.phrase,
-            };
-            const found = await connector.search(ctx);
-            for (const mention of found) {
-              if (!mentionMatches(`${mention.title ?? ""} ${mention.content}`, rule)) continue;
-              mention.publishedAt = parsePublishedAt(mention.publishedAt);
-              if (isValidDate(mention.publishedAt) && mention.publishedAt < since) continue;
-              collected.push({ mention, keywordId: keyword?.id });
-            }
-            if (connector.trackAccounts) {
-              const tracked = await connector.trackAccounts(ctx);
-              for (const mention of tracked) {
-                if (!mentionMatches(`${mention.title ?? ""} ${mention.content}`, rule)) continue;
-                collected.push({ mention, keywordId: keyword?.id });
-              }
-            }
-          }
-        }
-      }
-    } catch (error) {
-      await prisma.connectorWarning.create({
-        data: {
+  for (const row of targeted) {
+    const needsBackfill = Boolean(
+      opts.forceBackfill ||
+        (row.keyword ? !row.keyword.backfilledAt : !config.backfilledAt),
+    );
+    if (needsBackfill) {
+      collected.push(
+        ...(await collectFromSources({
+          ...shared,
+          sources: BACKFILL_SOURCES,
+          rows: [row],
+          since: backfillSince,
+          purpose: "backfill",
+          history: true,
+          includeTrackAccounts: false,
+        })),
+        ...(await collectBackfillSerp({
           projectId: project.id,
-          source,
-          code: "ingest_error",
-          message: error instanceof Error ? error.message : "Ingest failed",
-        },
-      });
+          workspaceId: project.workspaceId,
+          row,
+          since: backfillSince,
+        })),
+      );
+      if (row.keyword) {
+        await markKeywordBackfilled(row.keyword.id);
+      } else {
+        await prisma.project.update({
+          where: { id: project.id },
+          data: { config: { ...config, backfilledAt: new Date().toISOString() } },
+        });
+        config.backfilledAt = new Date().toISOString();
+      }
+    } else {
+      collected.push(
+        ...(await collectFromSources({
+          ...shared,
+          sources,
+          rows: [row],
+          since: regularSince,
+          purpose: "scheduled",
+          includeTrackAccounts: true,
+        })),
+      );
     }
   }
 

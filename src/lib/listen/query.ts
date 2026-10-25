@@ -170,25 +170,42 @@ function evalBoolean(haystack: string, query: string) {
   }
 }
 
+function foldKey(input: string) {
+  return normalizeText(input).replace(/\s+/g, "");
+}
+
+function includesNeedle(hay: string, needle: string) {
+  if (!needle) return false;
+  if (hay.includes(needle)) return true;
+  const hayFold = hay.replace(/\s+/g, "");
+  const needleFold = needle.replace(/\s+/g, "");
+  return needleFold.length >= 2 && hayFold.includes(needleFold);
+}
+
 export function mentionMatches(text: string, rule: KeywordRule) {
   const hay = normalizeText(text);
   if (!hay) return false;
   for (const word of rule.excludedWords ?? []) {
-    if (word.trim() && hay.includes(normalizeText(word))) return false;
+    if (word.trim() && includesNeedle(hay, normalizeText(word))) return false;
   }
   for (const word of rule.requiredWords ?? []) {
-    if (word.trim() && !hay.includes(normalizeText(word))) return false;
+    if (word.trim() && !includesNeedle(hay, normalizeText(word))) return false;
   }
   if (rule.booleanQuery?.trim()) return evalBoolean(hay, rule.booleanQuery);
   const variants = [rule.phrase, ...(rule.synonyms ?? [])].flatMap((term) =>
-    rule.autoVariants === false ? [term] : expandVariants(term),
+    rule.autoVariants === false ? [term, term.replace(/[-–—_]+/g, " "), term.replace(/[-–—_\s]+/g, "")] : expandVariants(term),
   );
-  const needles = variants.map(normalizeText).filter(Boolean);
+  const needles = [...new Set(variants.map(normalizeText).filter(Boolean))];
   if (!needles.length) return true;
   if (rule.matchType === "EXACT") {
-    return needles.some((needle) => new RegExp(`(?:^|\\s)${escapeRegExp(needle)}(?:\\s|$)`).test(hay));
+    const hayFold = foldKey(hay);
+    return needles.some((needle) => {
+      const spaced = new RegExp(`(?:^|\\s)${escapeRegExp(needle)}(?:\\s|$)`).test(hay);
+      const folded = needle.replace(/\s+/g, "").length >= 2 && hayFold.includes(needle.replace(/\s+/g, ""));
+      return spaced || folded;
+    });
   }
-  return needles.some((needle) => hay.includes(needle));
+  return needles.some((needle) => includesNeedle(hay, needle));
 }
 
 function escapeRegExp(value: string) {

@@ -45,6 +45,7 @@ export type ProjectConfig = {
   languages?: string[];
   webSearchProvider?: "brave" | "serpapi";
   podcastQueries?: string[];
+  backfilledAt?: string;
 };
 
 export type ConnectorContext = {
@@ -59,7 +60,7 @@ export type ConnectorContext = {
   accessToken?: string;
   accountId?: string;
   accountExternalId?: string;
-  purpose?: "live" | "scheduled";
+  purpose?: "live" | "scheduled" | "backfill";
   keywordKey?: string;
 };
 

@@ -3,8 +3,8 @@ import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { projectAnalytics } from "@/lib/analytics";
-import { listenNowAction } from "@/lib/actions";
-import { ChartBlock, PageHeader } from "@/components/ui";
+import { listenNowAction, searchPastYearAction } from "@/lib/actions";
+import { Button, ChartBlock, PageHeader } from "@/components/ui";
 import { MentionCard } from "@/components/mention-card";
 import { VolumeChart } from "@/components/charts";
 import { formatNumber } from "@/lib/utils";
@@ -35,6 +35,10 @@ export default async function ProjectOverview({ params }: { params: Promise<{ id
           <>
             <form action={listenNowAction.bind(null, project.id)}>
               <button className="rounded-xl bg-accent px-3 py-2 text-sm font-semibold text-accent-ink">{t(locale, "listenNow")}</button>
+            </form>
+            <form action={searchPastYearAction}>
+              <input type="hidden" name="projectId" value={project.id} />
+              <Button type="submit" variant="soft">{locale === "ar" ? "ابحث في السنة الماضية" : "Search past year"}</Button>
             </form>
             <Link href={`/app/mentions?brand=${project.id}`} className="rounded-xl border border-line px-3 py-2 text-sm">{t(locale, "mentions")}</Link>
             <Link href={`/app/analytics?brand=${project.id}`} className="rounded-xl border border-line px-3 py-2 text-sm">{t(locale, "analytics")}</Link>
@@ -72,6 +76,36 @@ export default async function ProjectOverview({ params }: { params: Promise<{ id
       >
         <VolumeChart data={stats.series} />
       </ChartBlock>
+      {project.keywords.length ? (
+        <div className="card space-y-3 p-5">
+          <h2 className="font-semibold">{locale === "ar" ? "الكلمات المراقبة" : "Watched words"}</h2>
+          <ul className="space-y-2">
+            {project.keywords.map((keyword) => (
+              <li key={keyword.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                <span>
+                  {keyword.phrase}
+                  <span className="ms-2 text-xs text-muted">
+                    {keyword.backfilledAt
+                      ? locale === "ar"
+                        ? `مسح السنة: ${keyword.backfilledAt.toLocaleDateString("ar")}`
+                        : `Past-year scan: ${keyword.backfilledAt.toLocaleDateString("en")}`
+                      : locale === "ar"
+                        ? "لم يُمسح التاريخ بعد"
+                        : "History scan pending"}
+                  </span>
+                </span>
+                <form action={searchPastYearAction}>
+                  <input type="hidden" name="projectId" value={project.id} />
+                  <input type="hidden" name="keywordId" value={keyword.id} />
+                  <Button type="submit" variant="ghost" className="px-2 py-1 text-xs">
+                    {locale === "ar" ? "ابحث في السنة الماضية" : "Search past year"}
+                  </Button>
+                </form>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
       <div className="space-y-3">
         <h2 className="font-semibold">{locale === "ar" ? "آخر الإشارات" : "Latest mentions"}</h2>
         {mentions.map((mention) => (

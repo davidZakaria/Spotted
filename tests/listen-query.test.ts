@@ -35,6 +35,18 @@ describe("keyword variants and boolean", () => {
     expect(mentionMatches("real estate in paris", booleanRule)).toBe(false);
   });
 
+  it("matches hyphen and space synonyms, including Arabic letter variants", () => {
+    const rule = ruleFromPhrase("J-Communities", { synonyms: ["J Communities"] });
+    expect(mentionMatches("Launch of J Communities this week", rule)).toBe(true);
+    expect(mentionMatches("J-Communities is hiring", rule)).toBe(true);
+    expect(mentionMatches("Welcome to JCommunities", rule)).toBe(true);
+    expect(mentionMatches("unrelated cooking video", rule)).toBe(false);
+
+    const arabic = ruleFromPhrase("إعلانات", { synonyms: ["اعلانات", "مجتمعات-ج"] });
+    expect(mentionMatches("حملة اعلانات جديدة", arabic)).toBe(true);
+    expect(mentionMatches("حديث عن مجتمعات ج اليوم", arabic)).toBe(true);
+  });
+
   it("understands Arabic operators and letter variants", () => {
     const rule = ruleFromPhrase("عقارات", { booleanQuery: "عقارات و القاهرة ليس لعبة" });
     expect(mentionMatches("أسعار العقارات في القاهرة", rule)).toBe(true);

@@ -8,12 +8,13 @@ export async function parseFeeds(
   source: Source,
   urls: string[],
   query?: string,
+  maxItems = 30,
 ): Promise<RawMention[]> {
   const out: RawMention[] = [];
   for (const url of urls.slice(0, 16)) {
     try {
       const feed = await parser.parseURL(url);
-      for (const item of feed.items.slice(0, 30)) {
+      for (const item of feed.items.slice(0, maxItems)) {
         const content = [item.title, item.contentSnippet, item.content].filter(Boolean).join("\n");
         if (query && !content.toLowerCase().includes(query.toLowerCase()) && source === "RSS") {
           // still include RSS items from a dedicated feed

@@ -43,7 +43,7 @@ export async function serpUsageSummary(workspaceId: string) {
 
 export async function assertSerpCall(input: {
   workspaceId?: string;
-  purpose: "live" | "scheduled";
+  purpose: "live" | "scheduled" | "backfill";
   keywordKey?: string;
   units?: number;
 }): Promise<{ allowed: boolean; remaining: number; reason?: string; reasonAr?: string }> {
@@ -86,14 +86,18 @@ export async function assertSerpCall(input: {
 
 export async function recordSerpCall(input: {
   workspaceId?: string;
-  purpose: "live" | "scheduled";
+  purpose: "live" | "scheduled" | "backfill";
   keywordKey?: string;
   engine: "google" | "google_news";
 }) {
   if (!input.workspaceId) return;
   const key = (input.keywordKey || "default").slice(0, 80);
   const endpoint =
-    input.purpose === "scheduled" ? `serpapi.scheduled.${key}.${input.engine}` : `serpapi.live.${input.engine}`;
+    input.purpose === "scheduled"
+      ? `serpapi.scheduled.${key}.${input.engine}`
+      : input.purpose === "backfill"
+        ? `serpapi.backfill.${key}.${input.engine}`
+        : `serpapi.live.${input.engine}`;
   await prisma.apiUsage.create({
     data: {
       workspaceId: input.workspaceId,
@@ -173,7 +177,7 @@ export async function fetchSerpResults(input: {
       api_key: key,
       hl,
       gl,
-      num: String(Math.min(input.limit ?? 10, 10)),
+      num: String(Math.min(Math.max(input.limit ?? 10, 1), 100)),
     })}`,
   );
   return mentionsFromSerpPayload(data, {
@@ -186,13 +190,14 @@ export async function fetchSerpResults(input: {
 export async function runSerpSearch(input: {
   query: string;
   engine: "google" | "google_news";
-  purpose: "live" | "scheduled";
+  purpose: "live" | "scheduled" | "backfill";
   workspaceId?: string;
   projectId?: string;
   keywordKey?: string;
   language?: string;
   country?: string;
   source: Source;
+  limit?: number;
 }): Promise<{ mentions: RawMention[]; skipped?: string; skippedAr?: string; remaining: number }> {
   const gate = await assertSerpCall({
     workspaceId: input.workspaceId,
@@ -208,6 +213,7 @@ export async function runSerpSearch(input: {
     language: input.language,
     country: input.country,
     source: input.source,
+    limit: input.limit,
   });
   await recordSerpCall({
     workspaceId: input.workspaceId,

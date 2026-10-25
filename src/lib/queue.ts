@@ -29,7 +29,10 @@ export async function enqueue(name: JobName, data: Record<string, string> = {}) 
 export async function runJob(name: JobName, data: Record<string, string> = {}) {
   switch (name) {
     case "ingest-project":
-      return ingestProject(data.projectId);
+      return ingestProject(data.projectId, {
+        forceBackfill: data.forceBackfill === "1",
+        keywordId: data.keywordId || undefined,
+      });
     case "ingest-all":
       return ingestAllActive();
     case "evaluate-alerts":

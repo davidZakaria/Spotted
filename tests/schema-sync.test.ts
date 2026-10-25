@@ -15,6 +15,14 @@ function migrationSql() {
 }
 
 describe("prisma schema and migrations", () => {
+  it("adds Keyword.backfilledAt with idempotent SQL", () => {
+    const schema = readFileSync("prisma/schema.prisma", "utf8");
+    expect(schema).toMatch(/model Keyword[\s\S]*backfilledAt\s+DateTime\?/);
+    expect(migrationSql()).toMatch(
+      /ALTER TABLE "Keyword" ADD COLUMN IF NOT EXISTS "backfilledAt" TIMESTAMP\(3\);/,
+    );
+  });
+
   it("adds Workspace.onboardedAt with idempotent SQL", () => {
     const schema = readFileSync("prisma/schema.prisma", "utf8");
     expect(schema).toMatch(/model Workspace[\s\S]*onboardedAt\s+DateTime\?/);

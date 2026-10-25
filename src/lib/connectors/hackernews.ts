@@ -27,7 +27,8 @@ export const hnConnector: Connector = {
     const q = encodeURIComponent(ctx.query);
     const since = ctx.since ? Math.floor(ctx.since.getTime() / 1000) : 0;
     const out: RawMention[] = [];
-    for (let page = 0; page < 2; page += 1) {
+    const pages = ctx.purpose === "backfill" ? 4 : 2;
+    for (let page = 0; page < pages; page += 1) {
       const data = await getJson<{ hits?: HnHit[] }>(
         `https://hn.algolia.com/api/v1/search_by_date?query=${q}&tags=(story,comment)&hitsPerPage=${ctx.limit ?? 25}&page=${page}${since ? `&numericFilters=created_at_i>${since}` : ""}`,
       );

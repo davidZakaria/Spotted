@@ -101,6 +101,23 @@ export async function keepWatchingAction(formData: FormData) {
   revalidatePath(`/app/projects/${projectId}`);
 }
 
+export async function searchPastYearAction(formData: FormData) {
+  const session = await requireSession();
+  if (!canEdit(session.role)) throw new Error("You need editor access");
+  const projectId = String(formData.get("projectId") ?? "");
+  const keywordId = String(formData.get("keywordId") ?? "") || undefined;
+  const project = await prisma.project.findFirst({
+    where: { id: projectId, workspaceId: session.workspaceId },
+  });
+  if (!project) throw new Error("Project not found");
+  const payload = { projectId, forceBackfill: "1", ...(keywordId ? { keywordId } : {}) };
+  const queued = await enqueue("ingest-project", payload);
+  if (!queued) await ingestProject(projectId, { forceBackfill: true, keywordId });
+  revalidatePath(`/app/projects/${projectId}`);
+  revalidatePath("/app/mentions");
+  revalidatePath("/app/analytics");
+}
+
 export async function listenNowAction(projectId: string) {
   const session = await requireSession();
   const project = await prisma.project.findFirst({

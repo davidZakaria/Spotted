@@ -205,6 +205,7 @@ model Keyword {
   booleanQuery  String?
   synonyms      String[]  @default([])
   autoVariants  Boolean   @default(true)
+  backfilledAt  DateTime?
   projectId     String
   createdAt     DateTime  @default(now())
   project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)

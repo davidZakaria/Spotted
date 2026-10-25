@@ -38,10 +38,10 @@ export const googleNewsConnector: Connector = {
       (edition) =>
         `https://news.google.com/rss/search?q=${encodeURIComponent(ctx.query)}&hl=${edition.hl}&gl=${edition.gl}&ceid=${edition.ceid}`,
     );
-    const rss = await parseFeeds("GOOGLE_NEWS", urls);
+    const rss = await parseFeeds("GOOGLE_NEWS", urls, undefined, ctx.purpose === "backfill" ? 80 : 30);
     try {
       const { hasSerpApi, runSerpSearch } = await import("../listen/serpapi");
-      if (!hasSerpApi()) return rss;
+      if (!hasSerpApi() || ctx.purpose === "backfill") return rss;
       const serp = await runSerpSearch({
         query: ctx.query,
         engine: "google_news",

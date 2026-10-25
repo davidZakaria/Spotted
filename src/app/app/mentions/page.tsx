@@ -6,10 +6,10 @@ import { BrandSwitcher } from "@/components/brand-switcher";
 import { MentionCard } from "@/components/mention-card";
 import { LiveSearch } from "@/components/live-search";
 import { TopicCloud } from "@/components/topic-cloud";
-import { ChartBlock, EmptyState, PageHeader } from "@/components/ui";
+import { Button, ChartBlock, EmptyState, PageHeader } from "@/components/ui";
 import { SentimentBars, VolumeChart } from "@/components/charts";
 import { t } from "@/lib/i18n";
-import { listenNowAction } from "@/lib/actions";
+import { listenNowAction, searchPastYearAction } from "@/lib/actions";
 import { PLATFORMS } from "@/lib/platforms";
 import { projectAnalytics } from "@/lib/analytics";
 import { influenceScore } from "@/lib/listen/dedupe";
@@ -83,9 +83,15 @@ export default async function MentionsPage({
           : "Search every working site right now, then save the word so we keep watching it."}
         tip={locale === "ar" ? "real-estate و real estate تُعاملان ككلمة واحدة." : "Hyphens and spaces are treated as the same word — real-estate also finds real estate."}
         actions={
-          <form action={listenNowAction.bind(null, brand.id)}>
-            <button className="rounded-xl bg-accent px-3 py-2 text-sm font-semibold text-accent-ink">{t(locale, "listenNow")}</button>
-          </form>
+          <>
+            <form action={listenNowAction.bind(null, brand.id)}>
+              <button className="rounded-xl bg-accent px-3 py-2 text-sm font-semibold text-accent-ink">{t(locale, "listenNow")}</button>
+            </form>
+            <form action={searchPastYearAction}>
+              <input type="hidden" name="projectId" value={brand.id} />
+              <Button type="submit" variant="soft">{locale === "ar" ? "ابحث في السنة الماضية" : "Search past year"}</Button>
+            </form>
+          </>
         }
       />
       <BrandSwitcher brands={brands} currentId={brand.id} path="/app/mentions" label={t(locale, "brands")} />

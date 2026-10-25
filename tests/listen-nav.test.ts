@@ -27,7 +27,8 @@ describe("Mentions live search UI", () => {
     const queue = readFileSync(resolve("src/lib/queue.ts"), "utf8");
     expect(queue).toMatch(/5 \* 60 \* 1000/);
     const ingest = readFileSync(resolve("src/lib/jobs/ingest.ts"), "utf8");
-    expect(ingest).toMatch(/30 \* 24 \* 60 \* 60 \* 1000/);
+    expect(ingest).toMatch(/INGEST_DAYS/);
+    expect(ingest).toMatch(/lookbackSince/);
     expect(ingest).toMatch(/searchQueries/);
   });
 });
