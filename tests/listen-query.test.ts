@@ -94,6 +94,9 @@ describe("live source honesty", () => {
     expect(byId.X.ready).toBe(false);
     expect(byId.X.note).toMatch(/Add key to include/);
     expect(byId.WEB_SEARCH.note).toMatch(/Add key to include/);
+    expect(byId.QUORA.ready).toBe(false);
+    expect(byId.QUORA.note).toBe("Found through Google search");
+    expect(byId.QUORA.note).not.toMatch(/needs a key/i);
     expect(byId.TIKTOK.note).toMatch(/Add key to include/);
     expect(byId.INSTAGRAM.note).toMatch(/Instagram/);
     expect(byId.YOUTUBE.ready).toBe(false);
@@ -127,6 +130,8 @@ describe("SerpAPI budget", () => {
     });
     expect(open.find((row) => row.id === "WEB_SEARCH")?.ready).toBe(true);
     expect(open.find((row) => row.id === "WEB_SEARCH")?.note).toMatch(/12 SerpAPI/);
+    expect(spent.find((row) => row.id === "QUORA")?.ready).toBe(false);
+    expect(open.find((row) => row.id === "QUORA")?.ready).toBe(true);
   });
 });
 

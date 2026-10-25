@@ -1,7 +1,8 @@
 import { env } from "../config";
 import { getJson } from "./http";
 import { cap, type Connector, type RawMention } from "./types";
-import { hasSerpApi, runSerpSearch } from "../listen/serpapi";
+import { hasSerpApi } from "../listen/serpapi";
+import { forumSerpQuery, searchForumsViaGoogle } from "../listen/forum-serp";
 import { hasRedditApp } from "../platform-status";
 
 export const REDDIT_VIA_GOOGLE_NOTE =
@@ -64,10 +65,7 @@ export function redditOauthPath(path: string) {
 }
 
 export function redditSerpQuery(keyword: string) {
-  const q = keyword.trim();
-  if (!q) return "site:reddit.com";
-  if (/\bsite:reddit\.com\b/i.test(q)) return q;
-  return `site:reddit.com ${q}`;
+  return forumSerpQuery(keyword, ["reddit.com"]);
 }
 
 export function labelRedditViaGoogle(mentions: RawMention[]): RawMention[] {
@@ -106,18 +104,7 @@ async function redditOauthGet<T = RedditListing>(path: string): Promise<T | null
 
 async function searchViaGoogle(ctx: Parameters<NonNullable<Connector["search"]>>[0]): Promise<RawMention[]> {
   if (!hasSerpApi()) return [];
-  const serp = await runSerpSearch({
-    query: redditSerpQuery(ctx.query),
-    engine: "google",
-    purpose: ctx.purpose ?? "scheduled",
-    workspaceId: ctx.workspaceId,
-    projectId: ctx.projectId,
-    keywordKey: ctx.keywordKey ?? ctx.query,
-    language: ctx.language,
-    country: ctx.country,
-    source: "REDDIT",
-  });
-  return labelRedditViaGoogle(serp.mentions);
+  return searchForumsViaGoogle(ctx, "reddit.com");
 }
 
 export const redditConnector: Connector = {

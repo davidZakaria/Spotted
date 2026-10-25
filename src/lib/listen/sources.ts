@@ -2,6 +2,7 @@ import type { Source } from "@prisma/client";
 import { env } from "@/lib/config";
 import { hasRedditApp, hasYoutubeApiKey } from "@/lib/platform-status";
 import { REDDIT_VIA_GOOGLE_NOTE, REDDIT_VIA_GOOGLE_NOTE_AR } from "@/lib/connectors/reddit";
+import { QUORA_VIA_GOOGLE_NOTE, QUORA_VIA_GOOGLE_NOTE_AR } from "@/lib/listen/forum-serp";
 
 export type LiveSourceStatus = {
   id: Source;
@@ -110,9 +111,17 @@ export function liveSourcePlan(input: {
       id: "QUORA",
       name: "Quora & forums",
       nameAr: "كورا والمنتديات",
-      ready: brave,
-      note: brave ? undefined : "Add key to include (BRAVE_SEARCH_API_KEY). SerpAPI is reserved for Google web and News.",
-      noteAr: brave ? undefined : "أضف BRAVE_SEARCH_API_KEY. SerpAPI reserved لجوجل والأخبار.",
+      ready: brave || (serp && serpLeft !== 0),
+      note: brave
+        ? undefined
+        : serp && serpLeft === 0
+          ? "SerpAPI monthly limit reached. Quora via Google is paused until next month."
+          : QUORA_VIA_GOOGLE_NOTE,
+      noteAr: brave
+        ? undefined
+        : serp && serpLeft === 0
+          ? "انتهى حد SerpAPI. بحث كورا عبر جوجل متوقف حتى الشهر القادم."
+          : QUORA_VIA_GOOGLE_NOTE_AR,
     },
     {
       id: "X",

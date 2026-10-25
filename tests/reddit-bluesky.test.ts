@@ -44,7 +44,8 @@ describe("Reddit compliance", () => {
     expect(src).not.toMatch(/redditPublicBases/);
     expect(src).toMatch(/oauth\.reddit\.com/);
     expect(src).toMatch(/hasRedditApp/);
-    expect(src).toMatch(/site:reddit\.com/);
+    expect(src).toMatch(/searchForumsViaGoogle/);
+    expect(src).toMatch(/["']reddit\.com["']/);
   });
 
   it("shows the Google-search card copy and is not ready without SerpAPI or approved keys", () => {

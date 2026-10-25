@@ -2,6 +2,7 @@ import { appConfig, env } from "../config";
 import { getJson } from "./http";
 import { assertBudget, recordUsage, warnProject } from "./usage";
 import { hasSerpApi, runSerpSearch } from "../listen/serpapi";
+import { searchForumsViaGoogle } from "../listen/forum-serp";
 import type { Connector, ConnectorContext, RawMention, Source } from "./types";
 import { parsePublishedAt } from "../listen/dates";
 
@@ -87,10 +88,13 @@ export const quoraConnector: Connector = {
   docsUrl: "https://serpapi.com/search-api",
   keyless: false,
   capabilities: [],
-  isConfigured: () => Boolean(env("BRAVE_SEARCH_API_KEY")),
+  isConfigured: () => Boolean(env("BRAVE_SEARCH_API_KEY") || env("SERPAPI_API_KEY")),
   async search(ctx) {
-    if (!env("BRAVE_SEARCH_API_KEY")) return [];
-    return runProvider("QUORA", ctx.query, ctx, "quora.com");
+    if (env("BRAVE_SEARCH_API_KEY")) {
+      return runProvider("QUORA", ctx.query, ctx, "quora.com");
+    }
+    if (!hasSerpApi()) return [];
+    return searchForumsViaGoogle(ctx, "quora.com");
   },
 };
 

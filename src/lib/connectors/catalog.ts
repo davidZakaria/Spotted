@@ -629,11 +629,16 @@ export const SOURCE_CATALOG: SourceMeta[] = [
     id: "QUORA",
     name: "Quora / forums",
     family: "Search",
-    docsUrl: "https://api.search.brave.com/app/documentation/web-search/get-started",
+    docsUrl: "https://serpapi.com/search-api",
     keyless: false,
     envVars: ["BRAVE_SEARCH_API_KEY", "SERPAPI_API_KEY"],
     capabilities: [
-      cap("keyword_search", true, "api_key", "site:quora.com (and other forums) via the web-search provider."),
+      cap(
+        "keyword_search",
+        true,
+        "api_key",
+        "Brave site:quora.com when BRAVE_SEARCH_API_KEY is set. Otherwise SerpAPI google site:quora.com, combined with Reddit when both use Google.",
+      ),
       cap("hashtag_search", false, "none"),
       cap("mention_listen", false, "none"),
       cap("public_account_track", false, "none", "Quora has no official partner API."),
@@ -650,7 +655,11 @@ export const SOURCE_CATALOG: SourceMeta[] = [
       cap("own_analytics", false, "none"),
       cap("upload_media", false, "none"),
     ],
-    notes: ["Quora does not offer a public API. Results come from Brave or SerpAPI web search."],
+    notes: [
+      "Quora has no public API. Brave is preferred when BRAVE_SEARCH_API_KEY is set.",
+      "Otherwise SerpAPI google with site:quora.com, counted against the SerpAPI monthly budget.",
+      "Reddit and Quora share one query — (site:reddit.com OR site:quora.com) — when both fall back to Google.",
+    ],
   },
   {
     id: "TRUSTPILOT",

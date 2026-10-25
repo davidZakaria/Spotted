@@ -8,6 +8,7 @@ import { dedupeMentions, influenceScore } from "./dedupe";
 import { mentionMatches, searchQueries, type KeywordRule } from "./query";
 import { liveSourcePlan, type LiveSourceStatus } from "./sources";
 import { serpUsageSummary } from "./serpapi";
+import { searchQueryCap } from "./forum-serp";
 import { isValidDate, parsePublishedAt, safeIso } from "./dates";
 import { tokenOf } from "@/lib/crypto";
 
@@ -50,8 +51,7 @@ export async function searchOneSource(input: {
   const connector = getConnector(input.source);
   if (!connector) return [];
   const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-  const paid = input.source === "WEB_SEARCH" || input.source === "QUORA";
-  const queries = searchQueries(input.rule, paid ? 1 : input.source === "YOUTUBE" ? 2 : 6);
+  const queries = searchQueries(input.rule, searchQueryCap(input.source));
   const out: RawMention[] = [];
   for (const query of queries) {
     const found = await connector.search({

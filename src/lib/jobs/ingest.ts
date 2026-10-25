@@ -7,6 +7,7 @@ import { analyzeSentiment, extractTopics } from "../sentiment";
 import { getConnector, KEYLESS_DEFAULTS } from "../connectors/registry";
 import type { ProjectConfig, RawMention } from "../connectors/types";
 import { mentionMatches, ruleFromPhrase, searchQueries, type KeywordRule } from "../listen/query";
+import { searchQueryCap } from "../listen/forum-serp";
 import { dedupeMentions } from "../listen/dedupe";
 
 export function mergeConnectedSources(
@@ -176,8 +177,7 @@ export async function ingestProject(projectId: string) {
     try {
       for (const account of passes) {
         for (const { keyword, rule, queries } of keywordRules) {
-          const paid = source === "WEB_SEARCH" || source === "QUORA";
-          const searchTerms = paid ? queries.slice(0, 1) : queries;
+          const searchTerms = queries.slice(0, searchQueryCap(source));
           for (const query of searchTerms) {
             const ctx = {
               query,

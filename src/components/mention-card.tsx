@@ -38,7 +38,7 @@ export function MentionCard({
               <span className="font-medium text-ink">{author}</span>
               <span>
                 on <PlatformName id={mention.source as Source} locale={locale} />
-                {mention.source === "REDDIT" && mention.kind === "via_google"
+                {(mention.source === "REDDIT" || mention.source === "QUORA") && mention.kind === "via_google"
                   ? locale === "ar"
                     ? " (عبر جوجل)"
                     : " (via Google)"

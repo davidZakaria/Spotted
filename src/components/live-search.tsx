@@ -185,6 +185,7 @@ export function LiveSearch({
               const status = state?.status ?? (row.ready ? "waiting" : "skipped");
               const found = state?.found ?? 0;
               const note = ar ? state?.noteAr ?? row.noteAr : state?.note ?? row.note;
+              const viaGoogle = /Found through Google search|عبر بحث جوجل/.test(note ?? "");
               const label =
                 status === "searching"
                   ? ar
@@ -195,9 +196,13 @@ export function LiveSearch({
                       ? `${row.nameAr} · وُجد ${found}`
                       : `${row.name} · ${found} found`
                     : status === "skipped"
-                      ? ar
-                        ? `${row.nameAr} · يحتاج مفتاحاً`
-                        : `${row.name} · needs a key`
+                      ? viaGoogle
+                        ? ar
+                          ? `${row.nameAr} · عبر جوجل`
+                          : `${row.name} · via Google`
+                        : ar
+                          ? `${row.nameAr} · يحتاج مفتاحاً`
+                          : `${row.name} · needs a key`
                       : ar
                         ? row.nameAr
                         : row.name;
@@ -208,7 +213,21 @@ export function LiveSearch({
                     {note ? <span className="block text-xs text-muted">{note}</span> : null}
                   </span>
                   <Badge tone={status === "done" ? "good" : status === "skipped" ? "warn" : "muted"}>
-                    {status === "searching" ? (ar ? "جاري" : "Live") : status === "done" ? found : status === "skipped" ? (ar ? "أضف مفتاحاً" : "Add key") : "…"}
+                    {status === "searching"
+                      ? ar
+                        ? "جاري"
+                        : "Live"
+                      : status === "done"
+                        ? found
+                        : status === "skipped"
+                          ? viaGoogle
+                            ? ar
+                              ? "جوجل"
+                              : "Google"
+                            : ar
+                              ? "أضف مفتاحاً"
+                              : "Add key"
+                          : "…"}
                   </Badge>
                 </li>
               );

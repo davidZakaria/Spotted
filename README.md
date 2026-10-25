@@ -76,7 +76,7 @@ Every source implements the same interface: keyword/hashtag/mention listening, p
 | Telegram | Public `t.me/s` channels | Bot token to post / inbox | No global search |
 | YouTube | Search with `YOUTUBE_API_KEY` | Google OAuth only to manage / upload to a channel | No DM API |
 | Web search | — | `BRAVE_SEARCH_API_KEY` (default) or `SERPAPI_API_KEY` | Not a social network |
-| Quora / forums | — | Same web-search keys (`site:quora.com`) | No official Quora API |
+| Quora / forums | SerpAPI `site:quora.com` (combined with Reddit when both use Google) | `BRAVE_SEARCH_API_KEY` preferred when set | No official Quora API |
 | X | — | Bearer + OAuth | **Pay-per-use.** Workspace daily/monthly call and $ budgets are enforced. |
 | Facebook Pages | — | Meta app + Page token / OAuth | No global keyword search. **Public competitor Pages need Page Public Content Access (App Review).** |
 | Instagram | — | Meta OAuth (Business/Creator) | **Hashtag search: 30 unique hashtags / 7 days / account** (enforced in-product). No public keyword firehose. Competitor = Business Discovery only. |
@@ -97,7 +97,7 @@ Every source implements the same interface: keyword/hashtag/mention listening, p
 
 Google Custom Search JSON API is **closed to new customers** and **shuts down 1 January 2027**. Spotted does not use it.
 
-Set `SERPAPI_API_KEY` to search Google web and Google News (engines `google` and `google_news`). The free plan is 250 searches/month — set `SERPAPI_MONTHLY_LIMIT` (default 250). Spotted uses SerpAPI for **Search everywhere** and at most two scheduled refreshes per watched word per day, then falls back to RSS news and other keyless sources. Optional `BRAVE_SEARCH_API_KEY` covers extra web/Quora results without spending SerpAPI.
+Set `SERPAPI_API_KEY` to search Google web and Google News (engines `google` and `google_news`). The free plan is 250 searches/month — set `SERPAPI_MONTHLY_LIMIT` (default 250). Spotted uses SerpAPI for **Search everywhere** and at most two scheduled refreshes per watched word per day, then falls back to RSS news and other keyless sources. Reddit and Quora share one budgeted Google query — `(site:reddit.com OR site:quora.com) <keyword>` — when both use SerpAPI; results are split by domain. Optional `BRAVE_SEARCH_API_KEY` is preferred for Quora (and extra web results) so those hits do not spend SerpAPI.
 
 ### X usage budgets
 
