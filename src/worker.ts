@@ -12,6 +12,8 @@ async function main() {
   await scheduleRepeats();
   const queued = await enqueue("ingest-all");
   console.log(queued ? "Queued ingest-all after deploy" : "Could not queue ingest-all; repeats still run every 5 minutes");
+  const inboxQueued = await enqueue("sync-inbox");
+  console.log(inboxQueued ? "Queued sync-inbox after deploy" : "Could not queue sync-inbox; inbox still refreshes every 5 minutes");
   encryptStoredTokens()
     .then((result) => {
       if (result.updated) console.log(`[worker] encrypted ${result.updated} stored token(s)`);

@@ -1,6 +1,7 @@
 import { prisma } from "../db";
 import { getConnector } from "../connectors/registry";
 import { tokenOf } from "../crypto";
+import { recordInboxSync, warnInbox } from "../inbox";
 
 export async function publishDuePosts() {
   const due = await prisma.scheduledPost.findMany({
@@ -42,7 +43,7 @@ export async function publishDuePosts() {
   return { published, attempted: due.length };
 }
 
-export async function syncInbox(workspaceId: string) {
+export async function syncInboxForWorkspace(workspaceId: string) {
   const accounts = await prisma.socialAccount.findMany({
     where: { workspaceId, isMock: false, accessToken: { not: null } },
   });
@@ -82,9 +83,29 @@ export async function syncInbox(workspaceId: string) {
         });
         stored += 1;
       }
-    } catch {
-      // permission gaps are expected
+    } catch (error) {
+      await warnInbox(workspaceId, account.platform, error);
     }
   }
-  return { stored };
+  await recordInboxSync(workspaceId, accounts[0]?.platform ?? "FACEBOOK");
+  return { stored, accounts: accounts.length };
+}
+
+export async function syncAllInboxes() {
+  const accounts = await prisma.socialAccount.findMany({
+    where: { isMock: false, accessToken: { not: null } },
+    distinct: ["workspaceId"],
+    select: { workspaceId: true },
+  });
+  let stored = 0;
+  for (const row of accounts) {
+    const result = await syncInboxForWorkspace(row.workspaceId);
+    stored += result.stored;
+  }
+  return { stored, workspaces: accounts.length };
+}
+
+export async function syncInbox(workspaceId?: string) {
+  if (workspaceId) return syncInboxForWorkspace(workspaceId);
+  return syncAllInboxes();
 }

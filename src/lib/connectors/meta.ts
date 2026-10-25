@@ -4,6 +4,7 @@ import { consumeInstagramHashtag } from "./quotas";
 import type { Connector, InboxPayload, RawMention } from "./types";
 import { parsePublishedAt } from "../listen/dates";
 import { tokenOf } from "../crypto";
+import { FACEBOOK_MESSENGER_NOTE, warnInbox } from "../inbox";
 
 const version = () => appConfig.graphVersion;
 
@@ -68,6 +69,41 @@ export function resolveFacebookPages(ctx: {
     seen.add(id);
   }
   return pages;
+}
+
+export type FacebookFeedComment = {
+  id?: string;
+  message?: string;
+  from?: { name?: string };
+  created_time?: string;
+  permalink_url?: string;
+};
+
+export type FacebookFeedPost = {
+  id?: string;
+  message?: string;
+  from?: { name?: string };
+  created_time?: string;
+  permalink_url?: string;
+  comments?: { data?: FacebookFeedComment[] };
+};
+
+export function commentsFromFacebookFeed(posts: FacebookFeedPost[]): InboxPayload[] {
+  const items: InboxPayload[] = [];
+  for (const post of posts) {
+    for (const comment of post.comments?.data ?? []) {
+      if (!comment.id) continue;
+      items.push({
+        externalId: comment.id,
+        type: "COMMENT",
+        authorName: comment.from?.name ?? "Page visitor",
+        content: comment.message ?? "",
+        url: comment.permalink_url ?? `https://www.facebook.com/${comment.id}`,
+        receivedAt: parsePublishedAt(comment.created_time),
+      });
+    }
+  }
+  return items;
 }
 
 function matchesQuery(text: string, query?: string) {
@@ -186,22 +222,14 @@ export const facebookConnector: Connector = {
     const t = token(ctx.accessToken);
     if (!t || !ctx.accountExternalId) return [];
     const items: InboxPayload[] = [];
-    const comments = await getJson<{ data?: { id: string; message?: string; from?: { name?: string }; created_time?: string }[] }>(
+    const feed = await getJson<{ data?: FacebookFeedPost[] }>(
       graphUrl(`/${ctx.accountExternalId}/feed`, {
         access_token: t,
-        fields: "comments{id,message,from,created_time}",
+        fields: "id,permalink_url,comments.limit(25){id,message,from,created_time,permalink_url}",
         limit: "10",
       }),
     );
-    for (const post of comments.data ?? []) {
-      items.push({
-        externalId: post.id,
-        type: "COMMENT",
-        authorName: post.from?.name ?? "Page visitor",
-        content: post.message ?? "",
-        receivedAt: parsePublishedAt(post.created_time),
-      });
-    }
+    items.push(...commentsFromFacebookFeed(feed.data ?? []));
     try {
       const convos = await getJson<{ data?: { id: string; updated_time?: string }[] }>(
         graphUrl(`/${ctx.accountExternalId}/conversations`, { access_token: t, fields: "id,updated_time", limit: "10" }),
@@ -215,8 +243,11 @@ export const facebookConnector: Connector = {
           receivedAt: parsePublishedAt(c.updated_time),
         });
       }
-    } catch {
-      // Messenger permission may be missing
+    } catch (error) {
+      await warnInbox(ctx.workspaceId, "FACEBOOK", error, {
+        code: "inbox_messenger",
+        message: FACEBOOK_MESSENGER_NOTE,
+      });
     }
     try {
       const ratings = await getJson<{ data?: { open_graph_story?: { id?: string }; reviewer?: { name?: string }; created_time?: string; review_text?: string }[] }>(
@@ -231,8 +262,11 @@ export const facebookConnector: Connector = {
           receivedAt: parsePublishedAt(r.created_time),
         });
       }
-    } catch {
-      // ratings permission
+    } catch (error) {
+      await warnInbox(ctx.workspaceId, "FACEBOOK", error, {
+        code: "inbox_reviews",
+        message: "Facebook didn't allow reading Page reviews. Reconnect the Page and allow recommendations.",
+      });
     }
     return items;
   },

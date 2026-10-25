@@ -23,6 +23,7 @@ import { generateTotpSecret, verifyTotp } from "./totp";
 import { openSecret, sealSecret } from "./crypto";
 import { parseCsvList, uniqueSlug } from "./utils";
 import { ingestProject } from "./jobs/ingest";
+import { syncInbox } from "./jobs/publish";
 import { enqueue } from "./queue";
 import { KEYLESS_DEFAULTS } from "./connectors/registry";
 import { buildCsvReport, buildPdfReport } from "./reports";
@@ -300,6 +301,13 @@ export async function generateReportAction(formData: FormData) {
     },
   });
   revalidatePath("/app/reports");
+}
+
+export async function refreshInboxAction() {
+  const session = await requireSession();
+  const queued = await enqueue("sync-inbox", { workspaceId: session.workspaceId });
+  if (!queued) await syncInbox(session.workspaceId);
+  revalidatePath("/app/inbox");
 }
 
 export async function replyInboxAction(formData: FormData) {
