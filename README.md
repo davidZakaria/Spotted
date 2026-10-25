@@ -41,6 +41,8 @@ npm test
 5. Switch English / العربية. Dark and light themes. Arabic mention text renders right-to-left.
 6. Schedule a post (a practice account is used until you connect a real one) and export a spreadsheet or PDF.
 
+Public pages (no login; Meta’s crawler can read them): `/privacy`, `/terms`, and `/data-deletion`. Linked in the footer. Data-deletion requests go to `davidsamii97@gmail.com`.
+
 ## Connectors
 
 Every source implements the same interface: keyword/hashtag/mention listening, public account/competitor tracking, comments and engagement, plus owned-account OAuth (publish, inbox, reply, own analytics) **as far as that platform’s official API allows**. Connected platforms and the table below mark limits the vendor does not permit. Those are API limits, not unfinished stubs.

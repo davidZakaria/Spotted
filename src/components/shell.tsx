@@ -14,6 +14,7 @@ import type { SessionUser } from "@/lib/auth";
 import { t as tr } from "@/lib/i18n";
 import { setLocaleAction } from "@/lib/actions";
 import { BrandMark } from "@/components/brand";
+import { SiteFooter } from "@/components/site-footer";
 import { ThemeToggle } from "@/components/theme-toggle";
 import type { Theme } from "@/lib/theme";
 
@@ -85,6 +86,9 @@ export function Shell({
           </div>
         </header>
         <main className="flex-1 px-4 py-6 md:px-8">{children}</main>
+        <div className="hidden border-t border-line px-8 py-4 md:block">
+          <SiteFooter compact />
+        </div>
         <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-line bg-bg-elev/95 px-1 py-1 text-[11px] md:hidden">
           {links.slice(0, 5).map((l) => (
             <Link key={l.href} href={l.href} className="flex flex-col items-center gap-1 rounded-lg px-1 py-2 text-muted">

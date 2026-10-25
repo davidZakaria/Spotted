@@ -1,17 +1,10 @@
 import Link from "next/link";
-import { BrandMark } from "@/components/brand";
+import { PublicShell } from "@/components/public-shell";
 
 export default function HomePage() {
   return (
-    <div className="min-h-screen">
-      <header className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-5">
-        <BrandMark />
-        <nav className="flex items-center gap-3 text-sm">
-          <Link href="/login" className="text-muted hover:text-ink">Sign in</Link>
-          <Link href="/signup" className="rounded-xl bg-accent px-3 py-2 font-medium text-accent-ink">Create account</Link>
-        </nav>
-      </header>
-      <main className="mx-auto w-full max-w-6xl px-6 pb-24 pt-10">
+    <PublicShell>
+      <main className="mx-auto w-full max-w-6xl px-6 pb-16 pt-10">
         <p className="text-xs font-medium uppercase tracking-[0.18em] text-accent">For marketing teams</p>
         <h1 className="mt-4 max-w-3xl text-5xl font-semibold leading-[1.1] tracking-tight">
           See every mention of your brand — then reply from one place.
@@ -36,6 +29,6 @@ export default function HomePage() {
           ))}
         </div>
       </main>
-    </div>
+    </PublicShell>
   );
 }

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { BrandMark } from "@/components/brand";
+import { SiteFooter } from "@/components/site-footer";
 
 export default async function SignupPage({
   searchParams,
@@ -11,8 +12,9 @@ export default async function SignupPage({
   if (await getSession()) redirect("/app");
   const { error } = await searchParams;
   return (
-    <div className="grid min-h-screen place-items-center px-4">
-      <form action="/api/auth/signup" method="post" className="card w-full max-w-md space-y-4 p-8">
+    <div className="grid min-h-screen place-items-center px-4 py-10">
+      <div className="w-full max-w-md space-y-6">
+      <form action="/api/auth/signup" method="post" className="card w-full space-y-4 p-8">
         <BrandMark />
         <div>
           <h1 className="mt-3 text-2xl font-semibold">Create your account</h1>
@@ -35,6 +37,8 @@ export default async function SignupPage({
           Already have one? <Link href="/login" className="text-accent">Sign in</Link>
         </p>
       </form>
+      <SiteFooter compact />
+      </div>
     </div>
   );
 }
