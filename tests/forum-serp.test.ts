@@ -11,6 +11,9 @@ import {
 } from "@/lib/listen/forum-serp";
 import { liveSourcePlan } from "@/lib/listen/sources";
 import type { RawMention } from "@/lib/connectors/types";
+import type { runSerpSearch } from "@/lib/listen/serpapi";
+
+type SerpRun = typeof runSerpSearch;
 
 function mention(url: string, title: string): RawMention {
   return {
@@ -69,7 +72,7 @@ describe("forum SerpAPI query and split", () => {
 
 describe("combined forum SerpAPI search", () => {
   it("runs one Google query and splits Reddit vs Quora", async () => {
-    const run = vi.fn(async () => ({
+    const run = vi.fn<SerpRun>(async () => ({
       mentions: [
         mention("https://www.reddit.com/r/RealEstate/comments/abc/prices", "reddit thread"),
         mention("https://www.quora.com/What-is-real-estate", "quora question"),
@@ -86,8 +89,9 @@ describe("combined forum SerpAPI search", () => {
     const reddit = await searchForumsViaGoogle(ctx, "reddit.com", { run, env });
     const quora = await searchForumsViaGoogle(ctx, "quora.com", { run, env });
     expect(run).toHaveBeenCalledTimes(1);
-    expect(run.mock.calls[0][0].query).toBe("(site:reddit.com OR site:quora.com) real-estate");
-    expect(run.mock.calls[0][0].engine).toBe("google");
+    const combined = run.mock.calls[0]?.[0];
+    expect(combined?.query).toBe("(site:reddit.com OR site:quora.com) real-estate");
+    expect(combined?.engine).toBe("google");
     expect(reddit).toHaveLength(1);
     expect(reddit[0].source).toBe("REDDIT");
     expect(quora).toHaveLength(1);
@@ -95,7 +99,7 @@ describe("combined forum SerpAPI search", () => {
   });
 
   it("keeps Brave as the preferred Quora provider and searches Reddit alone", async () => {
-    const run = vi.fn(async () => ({
+    const run = vi.fn<SerpRun>(async () => ({
       mentions: [mention("https://old.reddit.com/r/x/comments/1", "r")],
       remaining: 9,
     }));
@@ -105,7 +109,7 @@ describe("combined forum SerpAPI search", () => {
       { run, env: { SERPAPI_API_KEY: "k", BRAVE_SEARCH_API_KEY: "brave" } },
     );
     expect(run).toHaveBeenCalledTimes(1);
-    expect(run.mock.calls[0][0].query).toBe("site:reddit.com acme");
+    expect(run.mock.calls[0]?.[0]?.query).toBe("site:reddit.com acme");
   });
 });
 
