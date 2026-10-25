@@ -30,6 +30,7 @@ export default async function MentionsPage({
     to?: string;
     influence?: string;
     keyword?: string;
+    risk?: string;
   }>;
 }) {
   const session = await requireSession();
@@ -64,6 +65,7 @@ export default async function MentionsPage({
       ...(sp.sentiment ? { sentiment: sp.sentiment as Sentiment } : {}),
       ...(sp.language ? { language: sp.language } : {}),
       ...(sp.keyword ? { keywordId: sp.keyword } : {}),
+      ...(sp.risk === "complaint" ? { complaint: true } : {}),
       ...(sp.q
         ? { OR: [{ content: { contains: sp.q, mode: "insensitive" } }, { title: { contains: sp.q, mode: "insensitive" } }] }
         : {}),
@@ -184,7 +186,7 @@ export default async function MentionsPage({
         </ChartBlock>
       </div>
 
-      <form className="grid gap-2 md:grid-cols-6">
+      <form className="grid gap-2 md:grid-cols-7">
         <input name="q" defaultValue={sp.q} placeholder={locale === "ar" ? "كلمة للبحث المباشر" : "Word for live search"} />
         <select name="source" defaultValue={sp.source ?? ""}>
           <option value="">{locale === "ar" ? "كل المنصات" : "All platforms"}</option>
@@ -197,6 +199,10 @@ export default async function MentionsPage({
           <option value="POSITIVE">{t(locale, "positive")}</option>
           <option value="NEUTRAL">{t(locale, "neutral")}</option>
           <option value="NEGATIVE">{t(locale, "negative")}</option>
+        </select>
+        <select name="risk" defaultValue={sp.risk ?? ""}>
+          <option value="">{locale === "ar" ? "كل الإشارات" : "All mentions"}</option>
+          <option value="complaint">{t(locale, "complaintsRisk")}</option>
         </select>
         <select name="language" defaultValue={sp.language ?? ""}>
           <option value="">{locale === "ar" ? "كل اللغات" : "All languages"}</option>

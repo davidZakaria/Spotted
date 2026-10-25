@@ -1,6 +1,6 @@
 import type { Mention, Sentiment, Source } from "@prisma/client";
 import { PlatformLogo, PlatformName } from "@/components/platform-logo";
-import { SentimentPill } from "@/components/ui";
+import { Badge, SentimentPill } from "@/components/ui";
 import { t } from "@/lib/i18n";
 import { truncate } from "@/lib/utils";
 import { HISTORY_SCAN_KIND, HISTORY_SCAN_LABEL, HISTORY_SCAN_LABEL_AR } from "@/lib/listen/backfill";
@@ -8,7 +8,7 @@ import { HISTORY_SCAN_KIND, HISTORY_SCAN_LABEL, HISTORY_SCAN_LABEL_AR } from "@/
 type MentionLike = Pick<
   Mention,
   "id" | "url" | "title" | "content" | "authorName" | "authorHandle" | "source" | "sentiment" | "publishedAt" | "language"
-> & { project?: { name: string }; kind?: string | null };
+> & { project?: { name: string }; kind?: string | null; complaint?: boolean | null };
 
 export function MentionCard({
   mention,
@@ -53,7 +53,12 @@ export function MentionCard({
               {mention.project ? <span>· {mention.project.name}</span> : null}
               <span>· {when}</span>
             </div>
-            <SentimentPill value={mention.sentiment as Sentiment} locale={locale} />
+            <span className="flex flex-wrap items-center gap-1.5">
+              {mention.complaint ? (
+                <Badge tone="bad">{t(locale, "complaintsRisk")}</Badge>
+              ) : null}
+              <SentimentPill value={mention.sentiment as Sentiment} locale={locale} />
+            </span>
           </div>
           {mention.title ? (
             <p dir="auto" lang={mention.language ?? undefined} className="rtl-content mt-2 font-medium">

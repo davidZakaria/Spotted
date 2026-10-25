@@ -64,6 +64,8 @@ describe("historical backfill", () => {
     const planned = backfillSerpQuery(rule);
     expect(planned.query).toContain("OR");
     expect(planned.query).toContain("مجتمعات ج");
+    expect(planned.query.split(" OR ").length).toBeGreaterThanOrEqual(2);
+    expect(readFileSync("src/lib/jobs/ingest.ts", "utf8")).toMatch(/runSerpSearch\(\{[\s\S]*engine: "google"/);
     expect(planned.country).toBe("eg");
     expect(planned.language).toBe("ar");
     expect(egyptNewsRssUrl("مجتمعات ج")).toBe(
@@ -73,6 +75,7 @@ describe("historical backfill", () => {
     const mentions = readFileSync("src/app/app/mentions/page.tsx", "utf8");
     expect(mentions).toMatch(/Arabic/);
     expect(mentions).toMatch(/value="ar"/);
+    expect(mentions).toMatch(/complaintsRisk|value="complaint"/);
   });
 
   it("offers Search past year and shows Found in history scan", () => {

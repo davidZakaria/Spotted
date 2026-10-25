@@ -6,7 +6,7 @@ import { detectLanguage } from "../language";
 import { analyzeSentiment, extractTopics } from "../sentiment";
 import { getConnector, KEYLESS_DEFAULTS } from "../connectors/registry";
 import type { ProjectConfig, RawMention } from "../connectors/types";
-import { mentionMatches, ruleFromPhrase, searchQueries, type KeywordRule } from "../listen/query";
+import { mentionMatches, mentionSearchText, ruleFromPhrase, searchQueries, type KeywordRule } from "../listen/query";
 import { searchQueryCap } from "../listen/forum-serp";
 import { dedupeMentions } from "../listen/dedupe";
 import {
@@ -70,8 +70,9 @@ export async function persistMentions(
     const mention = byKey.get(`${row.mention.source}:${row.mention.externalId}`);
     if (!mention) continue;
     byKey.delete(`${row.mention.source}:${row.mention.externalId}`);
-    const lang = detectLanguage(`${mention.title ?? ""} ${mention.content}`);
-    const sentiment = await analyzeSentiment(`${mention.title ?? ""} ${mention.content}`);
+    const searchText = mentionSearchText(mention);
+    const lang = detectLanguage(searchText);
+    const sentiment = await analyzeSentiment(searchText);
     try {
       await prisma.mention.upsert({
         where: {
@@ -106,6 +107,7 @@ export async function persistMentions(
           parentExternalId: mention.parentExternalId,
           sentiment: sentiment.sentiment,
           sentimentScore: sentiment.sentimentScore,
+          complaint: sentiment.complaint,
           topics: extractTopics([mention.content], 4).map((topic) => topic.topic),
           raw: mention.raw as object | undefined,
         },
@@ -121,6 +123,7 @@ export async function persistMentions(
           commentCount: mention.commentCount ?? 0,
           sentiment: sentiment.sentiment,
           sentimentScore: sentiment.sentimentScore,
+          complaint: sentiment.complaint,
           language: lang.language,
         },
       });
@@ -182,7 +185,7 @@ async function collectFromSources(input: {
             };
             const found = await connector.search(ctx);
             for (const mention of found) {
-              if (!mentionMatches(`${mention.title ?? ""} ${mention.content}`, rule)) continue;
+              if (!mentionMatches(mentionSearchText(mention), rule)) continue;
               mention.publishedAt = parsePublishedAt(mention.publishedAt);
               if (isValidDate(mention.publishedAt) && mention.publishedAt < input.since) continue;
               collected.push({
@@ -193,7 +196,7 @@ async function collectFromSources(input: {
             if (input.includeTrackAccounts && connector.trackAccounts) {
               const tracked = await connector.trackAccounts(ctx);
               for (const mention of tracked) {
-                if (!mentionMatches(`${mention.title ?? ""} ${mention.content}`, rule)) continue;
+                if (!mentionMatches(mentionSearchText(mention), rule)) continue;
                 collected.push({ mention, keywordId: keyword?.id });
               }
             }
@@ -241,7 +244,7 @@ async function collectBackfillSerp(input: {
   });
   const out: { mention: RawMention; keywordId?: string }[] = [];
   for (const mention of serp.mentions) {
-    if (!mentionMatches(`${mention.title ?? ""} ${mention.content}`, input.row.rule)) continue;
+    if (!mentionMatches(mentionSearchText(mention), input.row.rule)) continue;
     mention.publishedAt = parsePublishedAt(mention.publishedAt);
     if (isValidDate(mention.publishedAt) && mention.publishedAt < input.since) continue;
     out.push({ mention: markHistoryScan(mention), keywordId: input.row.keyword?.id });

@@ -194,6 +194,10 @@ function includesNeedle(hay: string, needle: string) {
   return needleFold.length >= 2 && hayFold.includes(needleFold);
 }
 
+export function mentionSearchText(mention: { title?: string | null; content?: string | null }) {
+  return [mention.title, mention.content].filter((part) => Boolean(part && String(part).trim())).join("\n");
+}
+
 export function mentionMatches(text: string, rule: KeywordRule) {
   const hay = normalizeText(text);
   if (!hay) return false;

@@ -15,6 +15,14 @@ function migrationSql() {
 }
 
 describe("prisma schema and migrations", () => {
+  it("adds Mention.complaint and AlertType COMPLAINT with idempotent SQL", () => {
+    const schema = readFileSync("prisma/schema.prisma", "utf8");
+    expect(schema).toMatch(/model Mention[\s\S]*complaint\s+Boolean\s+@default\(false\)/);
+    expect(schema).toMatch(/enum AlertType[\s\S]*COMPLAINT/);
+    expect(migrationSql()).toMatch(/ALTER TYPE "AlertType" ADD VALUE IF NOT EXISTS 'COMPLAINT'/);
+    expect(migrationSql()).toMatch(/ALTER TABLE "Mention" ADD COLUMN IF NOT EXISTS "complaint" BOOLEAN NOT NULL DEFAULT false/);
+  });
+
   it("adds Keyword.backfilledAt with idempotent SQL", () => {
     const schema = readFileSync("prisma/schema.prisma", "utf8");
     expect(schema).toMatch(/model Keyword[\s\S]*backfilledAt\s+DateTime\?/);

@@ -5,7 +5,7 @@ import { persistMentions } from "@/lib/jobs/ingest";
 import { analyzeSentiment } from "@/lib/sentiment";
 import { detectLanguage } from "@/lib/language";
 import { dedupeMentions, influenceScore } from "./dedupe";
-import { mentionMatches, searchQueries, type KeywordRule } from "./query";
+import { mentionMatches, mentionSearchText, searchQueries, type KeywordRule } from "./query";
 import { liveSourcePlan, type LiveSourceStatus } from "./sources";
 import { serpUsageSummary } from "./serpapi";
 import { searchQueryCap } from "./forum-serp";
@@ -22,6 +22,7 @@ export type LiveHit = {
   authorHandle?: string;
   publishedAt: string;
   sentiment: "POSITIVE" | "NEUTRAL" | "NEGATIVE" | "UNKNOWN";
+  complaint?: boolean;
   language?: string;
   influence: number;
   reach: number;
@@ -75,13 +76,13 @@ export async function searchOneSource(input: {
     out.filter((mention) => {
       mention.publishedAt = parsePublishedAt(mention.publishedAt);
       if (isValidDate(mention.publishedAt) && mention.publishedAt < since) return false;
-      return mentionMatches(`${mention.title ?? ""} ${mention.content}`, input.rule);
+      return mentionMatches(mentionSearchText(mention), input.rule);
     }),
   );
 }
 
 export async function toLiveHit(mention: RawMention): Promise<LiveHit> {
-  const text = `${mention.title ?? ""} ${mention.content}`;
+  const text = mentionSearchText(mention);
   const sentiment = await analyzeSentiment(text);
   const language = detectLanguage(text);
   return {
@@ -94,6 +95,7 @@ export async function toLiveHit(mention: RawMention): Promise<LiveHit> {
     authorHandle: mention.authorHandle,
     publishedAt: safeIso(parsePublishedAt(mention.publishedAt)),
     sentiment: sentiment.sentiment,
+    complaint: sentiment.complaint,
     language: language.language,
     influence: influenceScore(mention),
     reach: mention.reach ?? mention.viewCount ?? mention.followerCount ?? 0,

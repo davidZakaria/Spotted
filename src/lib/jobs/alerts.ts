@@ -71,6 +71,23 @@ export async function evaluateAlerts(projectId?: string) {
         await notify(alert.channel, `Spotted keyword: ${alert.name}`, summary, alert.emailTo, alert.slackWebhook);
         fired += 1;
       }
+    } else if (alert.type === "COMPLAINT") {
+      const since = alert.lastFiredAt ?? new Date(Date.now() - 60 * 60 * 1000);
+      const matches = await prisma.mention.findMany({
+        where: {
+          projectId: alert.projectId,
+          collectedAt: { gt: since },
+          complaint: true,
+        },
+        take: 15,
+      });
+      if (matches.length) {
+        const summary = `${alert.project.name}: ${matches.length} new complaint or risk mentions (scam, lawsuit, استغاثة).`;
+        await prisma.alertEvent.create({ data: { alertId: alert.id, summary, payload: { ids: matches.map((m) => m.id) } } });
+        await prisma.alert.update({ where: { id: alert.id }, data: { lastFiredAt: new Date() } });
+        await notify(alert.channel, `Spotted complaints: ${alert.name}`, summary, alert.emailTo, alert.slackWebhook);
+        fired += 1;
+      }
     }
   }
   return { fired };

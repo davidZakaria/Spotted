@@ -20,7 +20,8 @@
     "auth:disable-demo": "tsx scripts/disable-demo.ts",
     "auth:encrypt-tokens": "tsx scripts/encrypt-tokens.ts",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "sentiment:rescore": "tsx scripts/rescore-sentiment.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

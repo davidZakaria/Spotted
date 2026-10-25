@@ -57,6 +57,7 @@ export default async function AlertsPage({
               <select name="type" defaultValue="SPIKE">
                 <option value="SPIKE">{locale === "ar" ? "عندما يقفز عدد الإشارات" : "When mention volume jumps"}</option>
                 <option value="KEYWORD">{locale === "ar" ? "عندما تظهر كلمة محددة" : "When a specific word appears"}</option>
+                <option value="COMPLAINT">{locale === "ar" ? "عند شكوى أو مخاطرة (نصب، قضية، استغاثة)" : "When a complaint or risk word appears"}</option>
               </select>
             </Field>
             <Field label={locale === "ar" ? "الكلمة الحساسة (اختياري)" : "Sensitive word (optional)"} hint={locale === "ar" ? "مثال: انقطاع، احتيال" : "Example: outage, refund"}>
@@ -99,7 +100,9 @@ export default async function AlertsPage({
               {alert.name}
               <HelpTip text={alert.type === "SPIKE"
                 ? (locale === "ar" ? "يُرسل عندما يرتفع عدد الإشارات فجأة." : "Sends when mention volume suddenly rises.")
-                : (locale === "ar" ? "يُرسل عندما تظهر الكلمة التي اخترتها." : "Sends when the word you chose appears.")} />
+                : alert.type === "COMPLAINT"
+                  ? (locale === "ar" ? "يُرسل عند إشارة فيها نصب أو قضية أو استغاثة أو شكوى شديدة." : "Sends when a mention has scam, lawsuit, distress, or a serious complaint.")
+                  : (locale === "ar" ? "يُرسل عندما تظهر الكلمة التي اخترتها." : "Sends when the word you chose appears.")} />
             </p>
             <p className="text-sm text-muted">
               {alert.enabled ? (locale === "ar" ? "يعمل" : "On") : (locale === "ar" ? "متوقف" : "Off")}

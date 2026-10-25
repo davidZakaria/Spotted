@@ -28,6 +28,8 @@ docker compose exec spotted-web npm run auth:encrypt-tokens
 # If an old demo user exists (demo/disabled owners do not block create-owner):
 docker compose exec spotted-web npm run auth:disable-demo
 # or: docker compose exec spotted-web npm run auth:disable-demo -- --delete
+# Re-score saved mentions with the Arabic/English complaint lexicon:
+docker compose exec spotted-web npm run sentiment:rescore
 ```
 
 Local demo seed is opt-in: `SEED_DEMO=true npm run db:seed` (`demo@spotted.app` / `demo1234`).
@@ -156,7 +158,7 @@ See `.env.example` for the full list. Grouped:
 | Security | `ENCRYPTION_KEY` (32-byte base64, required in production), `SEED_DEMO` (default off), `SIGNUP_MODE` (`closed` / `invite` / `open`), `SESSION_DAYS`, `LOGIN_MAX_ATTEMPTS`, `LOGIN_LOCKOUT_MINUTES` |
 
 Login, signup, and logout redirects are built from `APP_URL` / `NEXT_PUBLIC_APP_URL`, never from the incoming request host. Set both to the public URL people type in the browser.
-| Sentiment | `OPENAI_API_KEY`, `OPENAI_MODEL` (local EN+AR lexicon if unset) |
+| Sentiment | `OPENAI_API_KEY`, `OPENAI_MODEL` (local EN+AR lexicon, including Egyptian complaint words). Local NEGATIVE / Complaints & risk wins over OpenAI. After deploy: `npm run sentiment:rescore` |
 | Alerts | `SMTP_*`, `SLACK_WEBHOOK_URL` |
 | Web search | `SERPAPI_API_KEY`, `SERPAPI_MONTHLY_LIMIT` (default 250), `BRAVE_SEARCH_API_KEY` |
 | YouTube | `YOUTUBE_API_KEY`, `GOOGLE_OAUTH_*` |
@@ -182,7 +184,7 @@ Next.js 16 (App Router) · TypeScript · Tailwind 4 · Prisma 6 · Postgres · R
 npm test
 ```
 
-Covers language/RTL detection, English and Arabic sentiment, the connector capability catalog (including LinkedIn/TikTok limits, IG quota copy, Brave vs CSE), topic extraction, Home insight copy, APP_URL auth redirects, and a Prisma check that `schema.prisma` matches `prisma/migrations` (`npm run db:check`).
+Covers language/RTL detection, English and Arabic (Egyptian) sentiment plus Complaints & risk, Google News RSS description matching, the connector capability catalog (including LinkedIn/TikTok limits, IG quota copy, Brave vs CSE), topic extraction, Home insight copy, APP_URL auth redirects, and a Prisma check that `schema.prisma` matches `prisma/migrations` (`npm run db:check`).
 
 ## Architecture
 
