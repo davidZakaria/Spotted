@@ -1,11 +1,20 @@
 import { PrismaClient, Source } from "@prisma/client";
 import { hash } from "bcryptjs";
-import { ingestProject } from "../src/lib/jobs/ingest";
 import { KEYLESS_DEFAULTS } from "../src/lib/connectors/registry";
 
 const prisma = new PrismaClient();
 
+function seedDemoEnabled() {
+  const raw = process.env.SEED_DEMO?.trim().toLowerCase();
+  return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
+}
+
 async function main() {
+  if (!seedDemoEnabled()) {
+    console.log("Skipping demo seed (set SEED_DEMO=true to create demo@spotted.app).");
+    return;
+  }
+
   const email = "demo@spotted.app";
   const passwordHash = await hash("demo1234", 12);
   await prisma.user.updateMany({
@@ -14,7 +23,7 @@ async function main() {
   });
   const user = await prisma.user.upsert({
     where: { email },
-    update: {},
+    update: { disabled: false },
     create: { email, name: "Dana Demo", passwordHash, locale: "en" },
   });
 
@@ -148,14 +157,7 @@ async function main() {
     });
   }
 
-  console.log("Seeded demo user demo@spotted.app / demo1234");
-  console.log("Ingesting live mentions (Reddit, HN, RSS, Google News, Bluesky, Mastodon, podcasts)…");
-  try {
-    const result = await ingestProject(project.id);
-    console.log("Ingest result", result);
-  } catch (error) {
-    console.warn("Ingest during seed failed; use Listen now in the UI.", error);
-  }
+  console.log("Seeded demo user demo@spotted.app / demo1234 (no ingest — worker picks that up).");
 }
 
 main()

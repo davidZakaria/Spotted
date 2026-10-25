@@ -37,8 +37,8 @@ describe("public legal pages", () => {
   it("keeps middleware off the legal routes so Meta can crawl them", () => {
     const src = readFileSync(resolve("src/middleware.ts"), "utf8");
     expect(src).toMatch(/isPublicPath/);
-    expect(src).toMatch(/matcher:\s*\[\s*"\/app\/:path\*"/);
-    expect(src).not.toMatch(/"\/privacy"/);
+    expect(src).toMatch(/applySecurityHeaders/);
+    expect(src).toMatch(/csrfAllowed/);
     expect(src).not.toMatch(/matcher:.*privacy|terms|data-deletion/);
   });
 

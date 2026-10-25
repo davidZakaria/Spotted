@@ -4,7 +4,7 @@ import { usageSummary } from "@/lib/connectors/usage";
 import { serpUsageSummary } from "@/lib/listen/serpapi";
 import { instagramHashtagStatus } from "@/lib/connectors/quotas";
 import { prisma } from "@/lib/db";
-import { updateBudgetAction } from "@/lib/actions";
+import { disconnectAccountAction, updateBudgetAction } from "@/lib/actions";
 import { Badge, Button, Card, Field, PageHeader } from "@/components/ui";
 import { ConnectButton } from "@/components/connect-button";
 import { ConnectHelp } from "@/components/connect-help";
@@ -18,7 +18,6 @@ import {
   hasAppKeys,
   hasBlueskySession,
   hasGoogleOAuth,
-  hasRedditApp,
   hasYoutubeApiKey,
   oauthPathFor,
 } from "@/lib/platform-status";
@@ -40,6 +39,7 @@ export default async function PlatformsPage({
   const igQuota = await instagramHashtagStatus(igAccount?.id);
   const accounts = await prisma.socialAccount.findMany({
     where: { workspaceId: session.workspaceId },
+    select: { id: true, platform: true, displayName: true, handle: true, isMock: true, status: true },
   });
   const errorText = oauthErrorCopy(error, locale);
   const pageCount = Number(pages ?? 0);
@@ -124,6 +124,23 @@ export default async function PlatformsPage({
         </Card>
       </div>
 
+      {accounts.some((account) => !account.isMock) ? (
+        <Card>
+          <h2 className="font-semibold">{locale === "ar" ? "حسابات مربوطة" : "Connected accounts"}</h2>
+          <ul className="mt-3 space-y-2">
+            {accounts.filter((account) => !account.isMock).map((account) => (
+              <li key={account.id} className="flex items-center justify-between gap-3 text-sm">
+                <span>{account.displayName} · {account.platform}</span>
+                <form action={disconnectAccountAction}>
+                  <input type="hidden" name="accountId" value={account.id} />
+                  <Button type="submit" variant="soft">{locale === "ar" ? "قطع الربط" : "Disconnect"}</Button>
+                </form>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
+
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">{locale === "ar" ? "يعمل الآن" : "Working now"}</h2>
         <div className="grid gap-3 md:grid-cols-2">
@@ -174,12 +191,12 @@ export default async function PlatformsPage({
 
 function SearchBlockNote({ platformId, locale }: { platformId: string; locale: string }) {
   const ar = locale === "ar";
-  if (platformId === "REDDIT" && !hasRedditApp()) {
+  if (platformId === "REDDIT") {
     return (
       <p className="mt-1 text-xs text-muted">
         {ar
-          ? "بعض الخوادم يحجبها ريديت. إن بقيت النتائج فارغة أضف REDDIT_CLIENT_ID و REDDIT_CLIENT_SECRET من reddit.com/prefs/apps."
-          : "Some servers are blocked by Reddit. If results stay empty, add REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET from reddit.com/prefs/apps."}
+          ? "يُعثر عليها عبر بحث جوجل. الوصول المباشر لريديت يحتاج موافقة ريديت."
+          : "Found through Google search. Direct Reddit access needs Reddit's approval."}
       </p>
     );
   }

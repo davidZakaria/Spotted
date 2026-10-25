@@ -52,12 +52,16 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       SMTP_FROM: ${SMTP_FROM:-Spotted <alerts@localhost>}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-}
+      SEED_DEMO: ${SEED_DEMO:-}
+      SIGNUP_MODE: ${SIGNUP_MODE:-}
+      SESSION_DAYS: ${SESSION_DAYS:-7}
     depends_on:
       spotted-db:
         condition: service_healthy
       spotted-redis:
         condition: service_healthy
-    command: ["sh", "-c", "npx prisma migrate deploy && npx tsx prisma/seed.ts && node server.js"]
+    command: ["sh", "-c", "npx prisma migrate deploy && node server.js"]
 
   spotted-worker:
     build:
@@ -79,6 +83,8 @@ services:
       META_PAGE_ACCESS_TOKEN: ${META_PAGE_ACCESS_TOKEN:-}
       TWITTER_BEARER_TOKEN: ${TWITTER_BEARER_TOKEN:-}
       SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-}
+      SIGNUP_MODE: ${SIGNUP_MODE:-}
     depends_on:
       spotted-db:
         condition: service_healthy

@@ -1,6 +1,7 @@
 import type { Source } from "@prisma/client";
 import { env } from "@/lib/config";
-import { hasYoutubeApiKey } from "@/lib/platform-status";
+import { hasRedditApp, hasYoutubeApiKey } from "@/lib/platform-status";
+import { REDDIT_VIA_GOOGLE_NOTE, REDDIT_VIA_GOOGLE_NOTE_AR } from "@/lib/connectors/reddit";
 
 export type LiveSourceStatus = {
   id: Source;
@@ -40,7 +41,22 @@ export function liveSourcePlan(input: {
         ? `تبقّى ${serpLeft} بحثاً من SerpAPI هذا الشهر`
         : undefined;
   const rows: LiveSourceStatus[] = [
-    { id: "REDDIT", name: "Reddit", nameAr: "ريديت", ready: true },
+    {
+      id: "REDDIT",
+      name: "Reddit",
+      nameAr: "ريديت",
+      ready: hasRedditApp(e) || (serp && serpLeft !== 0),
+      note: hasRedditApp(e)
+        ? undefined
+        : serp && serpLeft === 0
+          ? "SerpAPI monthly limit reached. Reddit via Google is paused until next month."
+          : REDDIT_VIA_GOOGLE_NOTE,
+      noteAr: hasRedditApp(e)
+        ? undefined
+        : serp && serpLeft === 0
+          ? "انتهى حد SerpAPI. بحث ريديت عبر جوجل متوقف حتى الشهر القادم."
+          : REDDIT_VIA_GOOGLE_NOTE_AR,
+    },
     { id: "HACKER_NEWS", name: "Hacker News", nameAr: "هاكر نيوز", ready: true },
     { id: "GOOGLE_NEWS", name: "Google News", nameAr: "أخبار جوجل", ready: true },
     { id: "RSS", name: "News sites & blogs", nameAr: "مواقع الأخبار", ready: true },

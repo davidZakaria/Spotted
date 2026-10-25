@@ -1,21 +1,14 @@
 import { Queue, Worker, type Job } from "bullmq";
-import IORedis from "ioredis";
-import { appConfig } from "./config";
 import { ingestAllActive, ingestProject } from "./jobs/ingest";
 import { evaluateAlerts, sendDigests } from "./jobs/alerts";
 import { publishDuePosts, syncInbox } from "./jobs/publish";
+import { getRedis } from "./redis";
 
 export type JobName = "ingest-project" | "ingest-all" | "evaluate-alerts" | "publish-due" | "send-digests" | "sync-inbox";
 
-let connection: IORedis | null = null;
 let queue: Queue | null = null;
 
-export function getRedis() {
-  if (!connection) {
-    connection = new IORedis(appConfig.redisUrl, { maxRetriesPerRequest: null });
-  }
-  return connection;
-}
+export { getRedis };
 
 export function getQueue() {
   if (!queue) {

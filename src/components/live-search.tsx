@@ -101,8 +101,8 @@ export function LiveSearch({
         <p className={`rounded-xl px-4 py-3 text-sm ${serpRemaining === 0 ? "bg-warn/10 text-warn" : "bg-bg-soft text-muted"}`}>
           {serpRemaining === 0
             ? ar
-              ? `انتهى حد بحث الويب لهذا الشهر (${serpLimit}). ما زلنا نبحث في ريديت والأخبار ويوتيوب وغيرها.`
-              : `Web search is paused — ${serpLimit} SerpAPI searches used this month. Reddit, news, YouTube and the rest still run.`
+              ? `انتهى حد بحث الويب لهذا الشهر (${serpLimit}). الأخبار ويوتيوب ما زالا يعملان. بحث ريديت عبر جوجل متوقف أيضاً.`
+              : `Web search is paused — ${serpLimit} SerpAPI searches used this month. News and YouTube still run. Reddit via Google is paused too.`
             : ar
               ? `تبقّى ${serpRemaining} من ${serpLimit} بحثاً عبر جوجل هذا الشهر. نستخدمه للبحث المباشر ومرتين لكل كلمة يومياً.`
               : `${serpRemaining} of ${serpLimit} Google web/news searches left this month. Used for Search everywhere, plus two scheduled refreshes per watched word each day.`}
@@ -251,6 +251,7 @@ export function LiveSearch({
                 authorName: hit.authorName ?? null,
                 authorHandle: hit.authorHandle ?? null,
                 source: hit.source,
+                kind: hit.kind,
                 sentiment: hit.sentiment,
                 publishedAt: new Date(hit.publishedAt),
                 language: hit.language ?? null,

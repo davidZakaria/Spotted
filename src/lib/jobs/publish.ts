@@ -1,5 +1,6 @@
 import { prisma } from "../db";
 import { getConnector } from "../connectors/registry";
+import { tokenOf } from "../crypto";
 
 export async function publishDuePosts() {
   const due = await prisma.scheduledPost.findMany({
@@ -10,7 +11,7 @@ export async function publishDuePosts() {
   for (const post of due) {
     await prisma.scheduledPost.update({ where: { id: post.id }, data: { status: "PUBLISHING" } });
     try {
-      if (!post.account || post.account.isMock || !post.account.accessToken) {
+      if (!post.account || post.account.isMock || !tokenOf(post.account.accessToken)) {
         await prisma.scheduledPost.update({
           where: { id: post.id },
           data: { status: "PUBLISHED", publishedAt: new Date(), error: null },
@@ -23,7 +24,7 @@ export async function publishDuePosts() {
       await connector.publish({
         content: post.content,
         mediaUrls: post.mediaUrls,
-        accessToken: post.account.accessToken ?? undefined,
+        accessToken: tokenOf(post.account.accessToken),
         accountExternalId: post.account.externalId ?? undefined,
       });
       await prisma.scheduledPost.update({
@@ -53,7 +54,7 @@ export async function syncInbox(workspaceId: string) {
       const items = await connector.fetchInbox({
         query: "",
         workspaceId,
-        accessToken: account.accessToken ?? undefined,
+        accessToken: tokenOf(account.accessToken),
         accountExternalId: account.externalId ?? undefined,
         accountId: account.id,
       });

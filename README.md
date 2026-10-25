@@ -14,9 +14,19 @@ docker compose up --build
 
 Open [http://localhost:4721](http://localhost:4721).
 
-**Demo login:** `demo@spotted.app` / `demo1234`
+Compose starts `spotted-db`, `spotted-redis`, `spotted-web`, and `spotted-worker`. The web process runs `prisma migrate deploy` then `node server.js` immediately — ingest is the worker’s job, so deploys no longer sit on a 502.
 
-Compose starts `spotted-db`, `spotted-redis`, `spotted-web`, and `spotted-worker`. On first boot it migrates and seeds a workspace, a keyword project, an alert, a mock X account, a scheduled post, and live mentions from keyless sources.
+Create the first owner (do not leave `SEED_DEMO` on in production):
+
+```bash
+OWNER_EMAIL=you@yourbrand.com OWNER_PASSWORD='A-strong-Pass1!' npm run auth:create-owner
+# Encrypt any tokens stored before ENCRYPTION_KEY was set:
+npm run auth:encrypt-tokens
+# If an old demo user exists:
+npm run auth:disable-demo          # or: npm run auth:disable-demo -- --delete
+```
+
+Local demo seed is opt-in: `SEED_DEMO=true npm run db:seed` (`demo@spotted.app` / `demo1234`).
 
 ## Local development
 
@@ -26,15 +36,16 @@ cp .env.example .env
 # REDIS_URL=redis://127.0.0.1:6379
 # APP_URL=http://127.0.0.1:4721
 npx prisma migrate dev
-npm run db:seed
+# optional: SEED_DEMO=true npm run db:seed
+OWNER_EMAIL=you@yourbrand.com OWNER_PASSWORD='A-strong-Pass1!' npm run auth:create-owner
 npm run dev          # http://127.0.0.1:4721
-npm run dev:worker   # optional, ingest still runs inline if Redis is down
+npm run dev:worker   # ingest + publish; web no longer blocks on this
 npm test
 ```
 
 ## What you can do
 
-1. Sign up (or use the demo). First login opens a setup wizard: name your brand, add watch words, add competitors, pick platforms, see first results.
+1. Create an owner with `auth:create-owner`, or sign up if `SIGNUP_MODE=open`. First login opens a setup wizard: name your brand, add watch words, add competitors, pick platforms, see first results. Invite teammates by email when `SIGNUP_MODE` is `invite` or `closed`.
 2. Home summarizes the day: new mentions, mood, and the biggest spike — in plain language.
 3. Mentions is a live search: type any word and we query every working source right away (Reddit, news, YouTube, Bluesky, and more). Save it with **Keep watching this word** for Brand24-style rules (required/excluded words, Boolean, language, country, hyphen variants). A 30-day backfill runs, then the worker refreshes every 5 minutes.
 4. Connected platforms shows what works now versus what needs a login, with step-by-step help.
@@ -49,7 +60,7 @@ Every source implements the same interface: keyword/hashtag/mention listening, p
 
 | Source | Listening without keys | Needs | Important API limits |
 | --- | --- | --- | --- |
-| Reddit | Keyword + subreddit + comments | OAuth to post / inbox. **Datacenter IPs often get 403** — add `REDDIT_CLIENT_ID` / `REDDIT_CLIENT_SECRET` (script app) and optional `REDDIT_USER_AGENT`. | — |
+| Reddit | Keyword mentions via SerpAPI `site:reddit.com <keyword>` (same monthly budget), labeled Reddit (via Google) | Official `oauth.reddit.com` only after Reddit’s written approval — set `REDDIT_CLIENT_ID` / `REDDIT_CLIENT_SECRET`. No public JSON fallback. | Commercial API use needs Reddit approval (Responsible Builder Policy) |
 | Hacker News | Keyword + author + comments | — | No write API |
 | RSS / news | Feed URLs | — | No comments |
 | Google News | RSS search | — | Index only |
@@ -138,6 +149,7 @@ See `.env.example` for the full list. Grouped:
 | Group | Variables |
 | --- | --- |
 | Core | `DATABASE_URL`, `REDIS_URL`, `APP_URL`, `NEXT_PUBLIC_APP_URL`, `AUTH_SECRET` |
+| Security | `ENCRYPTION_KEY` (32-byte base64, required in production), `SEED_DEMO` (default off), `SIGNUP_MODE` (`closed` / `invite` / `open`), `SESSION_DAYS`, `LOGIN_MAX_ATTEMPTS`, `LOGIN_LOCKOUT_MINUTES` |
 
 Login, signup, and logout redirects are built from `APP_URL` / `NEXT_PUBLIC_APP_URL`, never from the incoming request host. Set both to the public URL people type in the browser.
 | Sentiment | `OPENAI_API_KEY`, `OPENAI_MODEL` (local EN+AR lexicon if unset) |
@@ -149,7 +161,7 @@ Login, signup, and logout redirects are built from `APP_URL` / `NEXT_PUBLIC_APP_
 | LinkedIn | `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET` |
 | TikTok | `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET` |
 | Google | `GOOGLE_GBP_*`, `GOOGLE_TRENDS_ENABLED` |
-| Reddit | `REDDIT_CLIENT_ID`, `REDDIT_CLIENT_SECRET`, `REDDIT_USER_AGENT` (optional; needed if public JSON returns 403) |
+| Reddit | Listening uses `SERPAPI_API_KEY`. `REDDIT_CLIENT_ID` / `REDDIT_CLIENT_SECRET` / `REDDIT_USER_AGENT` only after Reddit’s written approval |
 | Bluesky | `BLUESKY_HANDLE`, `BLUESKY_APP_PASSWORD` (publish, or if public AppView returns 403) |
 | Mastodon | `MASTODON_INSTANCE`, `MASTODON_CLIENT_*` |
 | Pinterest / Telegram / Discord / Twitch / Snap | matching `*_CLIENT_*` / bot tokens |

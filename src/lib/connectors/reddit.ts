@@ -1,6 +1,13 @@
 import { env } from "../config";
-import { getJson, HttpError } from "./http";
+import { getJson } from "./http";
 import { cap, type Connector, type RawMention } from "./types";
+import { hasSerpApi, runSerpSearch } from "../listen/serpapi";
+import { hasRedditApp } from "../platform-status";
+
+export const REDDIT_VIA_GOOGLE_NOTE =
+  "Found through Google search. Direct Reddit access needs Reddit's approval.";
+export const REDDIT_VIA_GOOGLE_NOTE_AR =
+  "يُعثر عليها عبر بحث جوجل. الوصول المباشر لريديت يحتاج موافقة ريديت.";
 
 type RedditListing = {
   data?: {
@@ -24,7 +31,10 @@ type RedditListing = {
   };
 };
 
-function mapChild(child: NonNullable<RedditListing["data"]>["children"] extends (infer T)[] | undefined ? T : never, kind: string): RawMention {
+function mapChild(
+  child: NonNullable<RedditListing["data"]>["children"] extends (infer T)[] | undefined ? T : never,
+  kind: string,
+): RawMention {
   const d = child.data;
   return {
     source: "REDDIT",
@@ -49,16 +59,23 @@ export function redditUserAgent(e: Record<string, string | undefined> = process.
   return e.REDDIT_USER_AGENT?.trim() || "web:spotted-listener:1.0.0 (by /u/spotted_app)";
 }
 
-export function redditPublicBases() {
-  return ["https://old.reddit.com", "https://www.reddit.com"] as const;
-}
-
 export function redditOauthPath(path: string) {
   return path.replace(/\.json(?=\?|$)/, "");
 }
 
-function retryable(error: unknown) {
-  return error instanceof HttpError && (error.status === 401 || error.status === 403 || error.status === 429);
+export function redditSerpQuery(keyword: string) {
+  const q = keyword.trim();
+  if (!q) return "site:reddit.com";
+  if (/\bsite:reddit\.com\b/i.test(q)) return q;
+  return `site:reddit.com ${q}`;
+}
+
+export function labelRedditViaGoogle(mentions: RawMention[]): RawMention[] {
+  return mentions.map((mention) => ({
+    ...mention,
+    source: "REDDIT",
+    kind: "via_google",
+  }));
 }
 
 async function redditAppToken() {
@@ -78,41 +95,29 @@ async function redditAppToken() {
   return token.access_token ?? null;
 }
 
-async function redditGet<T = RedditListing>(path: string): Promise<T> {
-  const ua = redditUserAgent();
-  const errors: HttpError[] = [];
+/** Official Reddit API only. No public JSON hosts — commercial use needs Reddit's written approval. */
+async function redditOauthGet<T = RedditListing>(path: string): Promise<T | null> {
+  const accessToken = await redditAppToken();
+  if (!accessToken) return null;
+  return getJson<T>(`https://oauth.reddit.com${redditOauthPath(path)}`, {
+    headers: { Authorization: `Bearer ${accessToken}`, "User-Agent": redditUserAgent() },
+  });
+}
 
-  try {
-    const accessToken = await redditAppToken();
-    if (accessToken) {
-      try {
-        return await getJson<T>(`https://oauth.reddit.com${redditOauthPath(path)}`, {
-          headers: { Authorization: `Bearer ${accessToken}`, "User-Agent": ua },
-        });
-      } catch (error) {
-        if (!retryable(error)) throw error;
-        if (error instanceof HttpError) errors.push(error);
-      }
-    }
-  } catch (error) {
-    if (!retryable(error)) throw error;
-    if (error instanceof HttpError) errors.push(error);
-  }
-
-  for (const host of redditPublicBases()) {
-    try {
-      return await getJson<T>(`${host}${path}`, { headers: { "User-Agent": ua } });
-    } catch (error) {
-      if (!retryable(error)) throw error;
-      if (error instanceof HttpError) errors.push(error);
-    }
-  }
-
-  throw new HttpError(
-    "Reddit blocked this server. Add REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET (create a script app at reddit.com/prefs/apps) and set REDDIT_USER_AGENT to web:spotted:1.0.0 (by /u/your_username).",
-    403,
-    errors[0]?.body,
-  );
+async function searchViaGoogle(ctx: Parameters<NonNullable<Connector["search"]>>[0]): Promise<RawMention[]> {
+  if (!hasSerpApi()) return [];
+  const serp = await runSerpSearch({
+    query: redditSerpQuery(ctx.query),
+    engine: "google",
+    purpose: ctx.purpose ?? "scheduled",
+    workspaceId: ctx.workspaceId,
+    projectId: ctx.projectId,
+    keywordKey: ctx.keywordKey ?? ctx.query,
+    language: ctx.language,
+    country: ctx.country,
+    source: "REDDIT",
+  });
+  return labelRedditViaGoogle(serp.mentions);
 }
 
 export const redditConnector: Connector = {
@@ -122,32 +127,42 @@ export const redditConnector: Connector = {
   docsUrl: "https://www.reddit.com/dev/api",
   keyless: true,
   capabilities: [],
-  isConfigured: () => true,
+  isConfigured: () => hasSerpApi() || hasRedditApp(),
   async search(ctx) {
-    const q = encodeURIComponent(ctx.query);
-    const window = ctx.since && Date.now() - ctx.since.getTime() > 8 * 86400000 ? "month" : "week";
-    const out: RawMention[] = [];
-    let after = "";
-    for (let page = 0; page < 2; page += 1) {
-      const data = await redditGet(`/search.json?q=${q}&sort=new&limit=${ctx.limit ?? 25}&t=${window}${after ? `&after=${after}` : ""}`);
-      out.push(...(data.data?.children ?? []).map((c) => mapChild(c, "post")));
-      after = (data.data as { after?: string } | undefined)?.after ?? "";
-      if (!after) break;
+    if (hasRedditApp()) {
+      const q = encodeURIComponent(ctx.query);
+      const window = ctx.since && Date.now() - ctx.since.getTime() > 8 * 86400000 ? "month" : "week";
+      const out: RawMention[] = [];
+      let after = "";
+      for (let page = 0; page < 2; page += 1) {
+        const data = await redditOauthGet(`/search.json?q=${q}&sort=new&limit=${ctx.limit ?? 25}&t=${window}${after ? `&after=${after}` : ""}`);
+        if (!data) break;
+        out.push(...(data.data?.children ?? []).map((c) => mapChild(c, "post")));
+        after = (data.data as { after?: string } | undefined)?.after ?? "";
+        if (!after) break;
+      }
+      if (out.length) return out;
     }
-    return out;
+    return searchViaGoogle(ctx);
   },
   async trackAccounts(ctx) {
-    const subs = ctx.projectConfig?.redditSubreddits ?? [];
-    const out: RawMention[] = [];
-    for (const sub of subs.slice(0, 8)) {
-      const data = await redditGet(`/r/${encodeURIComponent(sub.replace(/^r\//, ""))}/new.json?limit=15`);
-      out.push(...(data.data?.children ?? []).map((c) => mapChild(c, "post")));
+    if (hasRedditApp()) {
+      const subs = ctx.projectConfig?.redditSubreddits ?? [];
+      const out: RawMention[] = [];
+      for (const sub of subs.slice(0, 8)) {
+        const data = await redditOauthGet(`/r/${encodeURIComponent(sub.replace(/^r\//, ""))}/new.json?limit=15`);
+        if (!data) continue;
+        out.push(...(data.data?.children ?? []).map((c) => mapChild(c, "post")));
+      }
+      if (out.length) return out;
     }
-    return out;
+    return searchViaGoogle(ctx);
   },
   async fetchComments(ctx) {
+    if (!hasRedditApp()) return [];
     const id = ctx.externalId.replace(/^t3_/, "");
-    const data = await redditGet<unknown>(`/comments/${id}.json?limit=20`);
+    const data = await redditOauthGet<unknown>(`/comments/${id}.json?limit=20`);
+    if (!data) return [];
     const listing = Array.isArray(data) ? (data[1] as RedditListing) : (data as RedditListing | undefined);
     return (listing?.data?.children ?? [])
       .filter((c) => c.data?.body)

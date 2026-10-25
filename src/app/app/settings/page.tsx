@@ -29,6 +29,13 @@ export default async function SettingsPage() {
         : `${members} people in ${session.workspaceName}.`,
     },
     {
+      href: "/app/settings/security",
+      title: locale === "ar" ? "الأمان" : "Security",
+      body: locale === "ar"
+        ? "كلمة المرور، الجلسات، والتحقق بخطوتين للمالك."
+        : "Password, sessions, and optional owner two-factor codes.",
+    },
+    {
       href: "/app/onboarding",
       title: t(locale, "brands"),
       body: locale === "ar" ? `${brands} علامات. أضف علامة جديدة في أي وقت.` : `${brands} brands. Add another anytime.`,

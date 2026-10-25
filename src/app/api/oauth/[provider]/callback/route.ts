@@ -11,6 +11,10 @@ import {
 import { redirectTo } from "@/lib/redirects";
 import { logOauth } from "@/lib/oauth-errors";
 import type { Source } from "@prisma/client";
+import { getSession } from "@/lib/auth";
+import { consumeOauthState } from "@/lib/oauth-state";
+import { writeAudit } from "@/lib/audit";
+import { clientIp } from "@/lib/rate-limit";
 
 const PLATFORM: Record<string, Source> = {
   x: "X",
@@ -73,15 +77,27 @@ export async function GET(req: Request, { params }: { params: Promise<{ provider
     return redirectTo("/app/settings/platforms?error=oauth");
   }
 
+  const session = await getSession();
+  if (!session) {
+    logOauth("callback no session", { provider });
+    return redirectTo("/login?error=not_signed_in");
+  }
   let workspaceId = "";
   try {
-    const state = JSON.parse(Buffer.from(stateRaw, "base64url").toString()) as { workspaceId?: string };
-    workspaceId = String(state.workspaceId ?? "");
+    const state = await consumeOauthState({
+      state: stateRaw,
+      provider,
+      userId: session.id,
+      workspaceId: session.workspaceId,
+    });
+    workspaceId = state.workspaceId;
   } catch {
     logOauth("callback bad state", { provider });
     return redirectTo("/app/settings/platforms?error=oauth");
   }
-  if (!workspaceId) return redirectTo("/app/settings/platforms?error=oauth");
+  if (!workspaceId || workspaceId !== session.workspaceId) {
+    return redirectTo("/app/settings/platforms?error=oauth");
+  }
 
   try {
     if (provider === "meta") {
@@ -96,6 +112,13 @@ export async function GET(req: Request, { params }: { params: Promise<{ provider
         await upsertAccount(row);
       }
       logOauth("callback stored pages", { provider, pages: pages.length, rows: rows.length });
+      await writeAudit({
+        action: "oauth.connect",
+        userId: session.id,
+        workspaceId,
+        ip: clientIp(req.headers),
+        metadata: { provider, pages: pages.length },
+      });
       return redirectTo(`/app/settings/platforms?connected=1&pages=${pages.length}`);
     }
 
@@ -116,6 +139,13 @@ export async function GET(req: Request, { params }: { params: Promise<{ provider
         accessToken: token.accessToken,
       });
       logOauth("callback stored threads", { provider });
+      await writeAudit({
+        action: "oauth.connect",
+        userId: session.id,
+        workspaceId,
+        ip: clientIp(req.headers),
+        metadata: { provider },
+      });
       return redirectTo("/app/settings/platforms?connected=1");
     }
 
@@ -187,6 +217,13 @@ export async function GET(req: Request, { params }: { params: Promise<{ provider
       refreshToken,
     });
     logOauth("callback stored account", { provider });
+    await writeAudit({
+      action: "oauth.connect",
+      userId: session.id,
+      workspaceId,
+      ip: clientIp(req.headers),
+      metadata: { provider },
+    });
     return redirectTo("/app/settings/platforms?connected=1");
   } catch (error) {
     logOauth("callback exchange failed", {

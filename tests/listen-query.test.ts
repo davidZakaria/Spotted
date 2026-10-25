@@ -82,7 +82,12 @@ describe("live source honesty", () => {
       env: {},
     });
     const byId = Object.fromEntries(plan.map((row) => [row.id, row]));
-    expect(byId.REDDIT.ready).toBe(true);
+    expect(byId.REDDIT.ready).toBe(false);
+    expect(byId.REDDIT.note).toMatch(/Google search/);
+    expect(
+      liveSourcePlan({ connected: [], env: { SERPAPI_API_KEY: "k" }, serpRemaining: 10 }).find((row) => row.id === "REDDIT")
+        ?.ready,
+    ).toBe(true);
     expect(byId.GOOGLE_NEWS.ready).toBe(true);
     expect(byId.YOUTUBE.ready).toBe(false);
     expect(byId.YOUTUBE.note).toMatch(/YOUTUBE_API_KEY/);

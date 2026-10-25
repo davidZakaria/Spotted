@@ -3,6 +3,7 @@ import { getJson } from "./http";
 import { assertBudget, recordUsage, warnProject } from "./usage";
 import { hasSerpApi, runSerpSearch } from "../listen/serpapi";
 import type { Connector, ConnectorContext, RawMention, Source } from "./types";
+import { parsePublishedAt } from "../listen/dates";
 
 type BraveResult = {
   web?: { results?: { title: string; url: string; description?: string; age?: string }[] };
@@ -21,7 +22,7 @@ async function braveSearch(query: string, limit: number): Promise<RawMention[]> 
     url: r.url,
     title: r.title,
     content: r.description ?? "",
-    publishedAt: r.age ? new Date(r.age) : new Date(),
+    publishedAt: parsePublishedAt(r.age),
     kind: "article",
     raw: r,
   }));

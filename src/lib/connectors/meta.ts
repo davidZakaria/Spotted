@@ -2,6 +2,8 @@ import { appConfig, env } from "../config";
 import { getJson, postJson } from "./http";
 import { consumeInstagramHashtag } from "./quotas";
 import type { Connector, InboxPayload, RawMention } from "./types";
+import { parsePublishedAt } from "../listen/dates";
+import { tokenOf } from "../crypto";
 
 const version = () => appConfig.graphVersion;
 
@@ -11,7 +13,7 @@ function graphUrl(path: string, params: Record<string, string> = {}) {
 }
 
 function token(explicit?: string) {
-  return explicit || env("META_PAGE_ACCESS_TOKEN");
+  return tokenOf(explicit) || env("META_PAGE_ACCESS_TOKEN");
 }
 
 type FbPost = {
@@ -34,7 +36,7 @@ function mapPost(p: FbPost, source: "FACEBOOK" | "INSTAGRAM" | "THREADS", kind =
     content: p.message || p.story || "",
     authorName: p.from?.name,
     authorHandle: p.from?.id,
-    publishedAt: p.created_time ? new Date(p.created_time) : new Date(),
+    publishedAt: parsePublishedAt(p.created_time),
     likeCount: p.reactions?.summary?.total_count ?? 0,
     shareCount: p.shares?.count ?? 0,
     commentCount: p.comments?.summary?.total_count ?? 0,
@@ -132,7 +134,7 @@ export const facebookConnector: Connector = {
                 content: comment.message ?? "",
                 authorName: comment.from?.name,
                 authorHandle: comment.from?.id,
-                publishedAt: comment.created_time ? new Date(comment.created_time) : new Date(),
+                publishedAt: parsePublishedAt(comment.created_time),
                 kind: "comment",
                 parentExternalId: post.id,
               });
@@ -175,7 +177,7 @@ export const facebookConnector: Connector = {
       url: `https://www.facebook.com/${c.id}`,
       content: c.message ?? "",
       authorName: c.from?.name,
-      publishedAt: c.created_time ? new Date(c.created_time) : new Date(),
+      publishedAt: parsePublishedAt(c.created_time),
       kind: "comment",
       parentExternalId: ctx.externalId,
     }));
@@ -197,7 +199,7 @@ export const facebookConnector: Connector = {
         type: "COMMENT",
         authorName: post.from?.name ?? "Page visitor",
         content: post.message ?? "",
-        receivedAt: post.created_time ? new Date(post.created_time) : new Date(),
+        receivedAt: parsePublishedAt(post.created_time),
       });
     }
     try {
@@ -210,7 +212,7 @@ export const facebookConnector: Connector = {
           type: "MESSAGE",
           authorName: "Messenger",
           content: "Messenger conversation",
-          receivedAt: c.updated_time ? new Date(c.updated_time) : new Date(),
+          receivedAt: parsePublishedAt(c.updated_time),
         });
       }
     } catch {
@@ -226,7 +228,7 @@ export const facebookConnector: Connector = {
           type: "REVIEW",
           authorName: r.reviewer?.name ?? "Reviewer",
           content: r.review_text ?? "",
-          receivedAt: r.created_time ? new Date(r.created_time) : new Date(),
+          receivedAt: parsePublishedAt(r.created_time),
         });
       }
     } catch {
@@ -305,7 +307,7 @@ export const instagramConnector: Connector = {
           content: m.caption ?? `#${clean}`,
           authorName: m.username,
           authorHandle: m.username,
-          publishedAt: m.timestamp ? new Date(m.timestamp) : new Date(),
+          publishedAt: parsePublishedAt(m.timestamp),
           likeCount: m.like_count ?? 0,
           commentCount: m.comments_count ?? 0,
           engagement: (m.like_count ?? 0) + (m.comments_count ?? 0),
@@ -336,7 +338,7 @@ export const instagramConnector: Connector = {
             url: m.permalink ?? "",
             content: m.caption ?? "",
             authorHandle: handle,
-            publishedAt: m.timestamp ? new Date(m.timestamp) : new Date(),
+            publishedAt: parsePublishedAt(m.timestamp),
             kind: "post",
           });
         }
@@ -363,7 +365,7 @@ export const instagramConnector: Connector = {
           type: "COMMENT",
           authorName: c.username ?? "ig user",
           content: c.text ?? "",
-          receivedAt: c.timestamp ? new Date(c.timestamp) : new Date(),
+          receivedAt: parsePublishedAt(c.timestamp),
         });
       }
     }
@@ -414,7 +416,7 @@ export const threadsConnector: Connector = {
       url: t.permalink ?? "",
       content: t.text ?? "",
       authorHandle: t.username,
-      publishedAt: t.timestamp ? new Date(t.timestamp) : new Date(),
+      publishedAt: parsePublishedAt(t.timestamp),
       kind: "post",
     }));
   },

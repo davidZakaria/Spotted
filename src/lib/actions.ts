@@ -4,7 +4,23 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { Source, type AlertChannel, type AlertType, type MatchType, type Role } from "@prisma/client";
 import { prisma } from "./db";
-import { canAdmin, canEdit, requireSession } from "./auth";
+import {
+  assertPassword,
+  canAdmin,
+  canEdit,
+  destroyAllSessions,
+  hashPassword,
+  requireSession,
+  verifyPassword,
+} from "./auth";
+import { accountInWorkspace, inboxInWorkspace, projectInWorkspace } from "./authz";
+import { inviteSchema } from "./validation";
+import { writeAudit } from "./audit";
+import { sendMail } from "./mail";
+import { requestMeta } from "./request-meta";
+import { absoluteUrl } from "./urls";
+import { generateTotpSecret, verifyTotp } from "./totp";
+import { openSecret, sealSecret } from "./crypto";
 import { parseCsvList, uniqueSlug } from "./utils";
 import { ingestProject } from "./jobs/ingest";
 import { enqueue } from "./queue";
@@ -103,6 +119,7 @@ export async function createAlertAction(formData: FormData) {
   const session = await requireSession();
   if (!canEdit(session.role)) throw new Error("You need editor access");
   const projectId = String(formData.get("projectId"));
+  await projectInWorkspace(session.workspaceId, projectId);
   await prisma.alert.create({
     data: {
       projectId,
@@ -128,6 +145,9 @@ export async function schedulePostAction(formData: FormData) {
   const when = String(formData.get("scheduledAt") ?? "");
   const scheduledAt = when ? new Date(when) : new Date(Date.now() + 60 * 60 * 1000);
   let accountId = String(formData.get("accountId") ?? "") || null;
+  if (accountId) {
+    await accountInWorkspace(session.workspaceId, accountId);
+  }
   if (!accountId) {
     const existing = await prisma.socialAccount.findFirst({
       where: { workspaceId: session.workspaceId, isMock: true, platform: "X" },
@@ -162,14 +182,53 @@ export async function schedulePostAction(formData: FormData) {
 export async function inviteMemberAction(formData: FormData) {
   const session = await requireSession();
   if (!canAdmin(session.role)) throw new Error("Admin only");
-  const email = String(formData.get("email") ?? "").toLowerCase();
-  const role = String(formData.get("role") ?? "VIEWER") as Role;
-  const user = await prisma.user.findUnique({ where: { email } });
-  if (!user) throw new Error("That user must sign up first");
-  await prisma.membership.upsert({
-    where: { userId_workspaceId: { userId: user.id, workspaceId: session.workspaceId } },
-    update: { role },
-    create: { userId: user.id, workspaceId: session.workspaceId, role },
+  const parsed = inviteSchema.safeParse({
+    email: String(formData.get("email") ?? ""),
+    role: String(formData.get("role") ?? "EDITOR"),
+  });
+  if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? "Check the invite");
+  const email = parsed.data.email.toLowerCase();
+  const role = parsed.data.role as Role;
+  const existing = await prisma.user.findUnique({ where: { email } });
+  if (existing) {
+    await prisma.membership.upsert({
+      where: { userId_workspaceId: { userId: existing.id, workspaceId: session.workspaceId } },
+      update: { role },
+      create: { userId: existing.id, workspaceId: session.workspaceId, role },
+    });
+    await writeAudit({
+      action: "invite.accept",
+      userId: session.id,
+      workspaceId: session.workspaceId,
+      ...(await requestMeta()),
+      metadata: { email, existingUser: true },
+    });
+    revalidatePath("/app/settings/members");
+    return;
+  }
+  const token = crypto.randomUUID();
+  await prisma.invite.create({
+    data: {
+      email,
+      token,
+      workspaceId: session.workspaceId,
+      role,
+      invitedById: session.id,
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    },
+  });
+  const link = absoluteUrl(`/signup?invite=${token}`);
+  await sendMail({
+    to: email,
+    subject: `Join ${session.workspaceName} on Spotted`,
+    text: `${session.name} invited you to ${session.workspaceName} on Spotted.\n\nAccept the invite:\n${link}\n\nThis link expires in 7 days.`,
+  });
+  await writeAudit({
+    action: "invite.create",
+    userId: session.id,
+    workspaceId: session.workspaceId,
+    ...(await requestMeta()),
+    metadata: { email, role },
   });
   revalidatePath("/app/settings/members");
 }
@@ -224,6 +283,7 @@ export async function updateBudgetAction(formData: FormData) {
 export async function generateReportAction(formData: FormData) {
   const session = await requireSession();
   const projectId = String(formData.get("projectId"));
+  await projectInWorkspace(session.workspaceId, projectId);
   const format = String(formData.get("format") ?? "CSV") as "CSV" | "PDF";
   const from = new Date(String(formData.get("from") ?? new Date(Date.now() - 7 * 86400000).toISOString()));
   const to = new Date(String(formData.get("to") ?? new Date().toISOString()));
@@ -246,18 +306,15 @@ export async function replyInboxAction(formData: FormData) {
   const session = await requireSession();
   const id = String(formData.get("id"));
   const message = String(formData.get("message") ?? "");
-  const item = await prisma.inboxItem.findFirst({
-    where: { id, workspaceId: session.workspaceId },
-    include: { account: true },
-  });
-  if (!item) throw new Error("Inbox item not found");
+  const item = await inboxInWorkspace(session.workspaceId, id);
   await prisma.inboxItem.update({ where: { id }, data: { status: "REPLIED" } });
   if (item.account && !item.account.isMock && item.account.accessToken) {
     const { getConnector } = await import("./connectors/registry");
+    const { tokenOf } = await import("./crypto");
     const connector = getConnector(item.platform);
     await connector?.reply?.({
       query: "",
-      accessToken: item.account.accessToken,
+      accessToken: tokenOf(item.account.accessToken),
       accountExternalId: item.account.externalId ?? undefined,
       externalId: item.externalId,
       message,
@@ -304,4 +361,102 @@ export async function completeOnboardingAction(formData: FormData) {
   if (!queued) await ingestProject(project.id);
   revalidatePath("/app");
   redirect(`/app?welcome=1`);
+}
+
+export async function disconnectAccountAction(formData: FormData) {
+  const session = await requireSession();
+  if (!canAdmin(session.role)) throw new Error("Admin only");
+  const accountId = String(formData.get("accountId") ?? "");
+  const account = await accountInWorkspace(session.workspaceId, accountId);
+  await prisma.socialAccount.delete({ where: { id: account.id } });
+  await writeAudit({
+    action: "oauth.disconnect",
+    userId: session.id,
+    workspaceId: session.workspaceId,
+    ...(await requestMeta()),
+    metadata: { platform: account.platform, accountId: account.id },
+  });
+  revalidatePath("/app/settings/platforms");
+}
+
+export async function changePasswordAction(formData: FormData) {
+  const session = await requireSession();
+  const current = String(formData.get("currentPassword") ?? "");
+  const next = String(formData.get("newPassword") ?? "");
+  assertPassword(next);
+  const user = await prisma.user.findUnique({ where: { id: session.id } });
+  if (!user || !(await verifyPassword(current, user.passwordHash))) {
+    throw new Error("Current password is wrong");
+  }
+  await prisma.user.update({
+    where: { id: session.id },
+    data: { passwordHash: await hashPassword(next) },
+  });
+  await writeAudit({
+    action: "password.change",
+    userId: session.id,
+    workspaceId: session.workspaceId,
+    ...(await requestMeta()),
+  });
+  revalidatePath("/app/settings/security");
+}
+
+export async function logoutEverywhereAction() {
+  const session = await requireSession();
+  await destroyAllSessions(session.id);
+  await writeAudit({
+    action: "logout.all",
+    userId: session.id,
+    workspaceId: session.workspaceId,
+    ...(await requestMeta()),
+  });
+  redirect("/login");
+}
+
+export async function startTotpAction() {
+  const session = await requireSession();
+  if (session.role !== "OWNER") throw new Error("Only the owner can turn on two-factor authentication");
+  const secret = generateTotpSecret();
+  await prisma.user.update({
+    where: { id: session.id },
+    data: { totpSecret: sealSecret(secret), totpEnabled: false },
+  });
+  revalidatePath("/app/settings/security");
+}
+
+export async function confirmTotpAction(formData: FormData) {
+  const session = await requireSession();
+  if (session.role !== "OWNER") throw new Error("Only the owner can turn on two-factor authentication");
+  const code = String(formData.get("totp") ?? "");
+  const user = await prisma.user.findUnique({ where: { id: session.id } });
+  const secret = openSecret(user?.totpSecret);
+  if (!secret || !verifyTotp(secret, code)) throw new Error("That code did not match. Try again.");
+  await prisma.user.update({ where: { id: session.id }, data: { totpEnabled: true } });
+  await writeAudit({
+    action: "totp.enable",
+    userId: session.id,
+    workspaceId: session.workspaceId,
+    ...(await requestMeta()),
+  });
+  revalidatePath("/app/settings/security");
+}
+
+export async function disableTotpAction(formData: FormData) {
+  const session = await requireSession();
+  const password = String(formData.get("password") ?? "");
+  const user = await prisma.user.findUnique({ where: { id: session.id } });
+  if (!user || !(await verifyPassword(password, user.passwordHash))) {
+    throw new Error("Password is wrong");
+  }
+  await prisma.user.update({
+    where: { id: session.id },
+    data: { totpEnabled: false, totpSecret: null },
+  });
+  await writeAudit({
+    action: "totp.disable",
+    userId: session.id,
+    workspaceId: session.workspaceId,
+    ...(await requestMeta()),
+  });
+  revalidatePath("/app/settings/security");
 }

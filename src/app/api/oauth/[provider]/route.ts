@@ -5,6 +5,9 @@ import { redirectTo } from "@/lib/redirects";
 import { logOauth } from "@/lib/oauth-errors";
 import { hasGoogleOAuth, hasMetaAppKeys, hasThreadsKeys } from "@/lib/platform-status";
 import { metaAuthorizeUrl, threadsAuthorizeUrl } from "@/lib/connectors/meta-oauth";
+import { createOauthState } from "@/lib/oauth-state";
+import { consumeRateLimit, clientIp, rateLimitResponse } from "@/lib/rate-limit";
+import { oauthProviderSchema } from "@/lib/validation";
 
 const SCOPES: Record<string, string> = {
   x: "tweet.read tweet.write users.read dm.read dm.write offline.access",
@@ -16,15 +19,32 @@ const SCOPES: Record<string, string> = {
   ].join(" "),
 };
 
-export async function GET(_req: Request, { params }: { params: Promise<{ provider: string }> }) {
+export async function GET(req: Request, { params }: { params: Promise<{ provider: string }> }) {
   const session = await getSession();
-  const { provider } = await params;
+  const { provider: rawProvider } = await params;
+  const parsed = oauthProviderSchema.safeParse(rawProvider);
+  const provider = parsed.success ? parsed.data : rawProvider;
   logOauth("start", { provider, signedIn: Boolean(session) });
   if (!session) {
     return redirectTo(`/login?next=${encodeURIComponent(`/api/oauth/${provider}`)}&error=${encodeURIComponent("Sign in first, then tap Connect.")}`);
   }
+  if (!parsed.success) {
+    return NextResponse.json({ error: `We cannot connect ${provider} yet.` }, { status: 400 });
+  }
 
-  const state = Buffer.from(JSON.stringify({ workspaceId: session.workspaceId, provider })).toString("base64url");
+  const ip = clientIp(req.headers);
+  const [userLimit, ipLimit] = await Promise.all([
+    consumeRateLimit({ key: `oauth:${session.id}`, limit: 8, windowSec: 60 }),
+    consumeRateLimit({ key: `oauth:ip:${ip}`, limit: 12, windowSec: 60 }),
+  ]);
+  if (!userLimit.allowed) return rateLimitResponse(userLimit, "Too many connect attempts. Wait a minute.");
+  if (!ipLimit.allowed) return rateLimitResponse(ipLimit, "Too many connect attempts. Wait a minute.");
+
+  const state = await createOauthState({
+    userId: session.id,
+    workspaceId: session.workspaceId,
+    provider,
+  });
   let url = "";
 
   try {
@@ -61,9 +81,6 @@ export async function GET(_req: Request, { params }: { params: Promise<{ provide
       }
       const id = env("GOOGLE_OAUTH_CLIENT_ID") || env("GOOGLE_GBP_CLIENT_ID");
       url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(id)}&redirect_uri=${encodeURIComponent(oauthRedirect(provider))}&response_type=code&scope=${encodeURIComponent(SCOPES.google)}&state=${state}&access_type=offline&prompt=consent`;
-    } else {
-      logOauth("start aborted", { provider, reason: "unknown_provider" });
-      return NextResponse.json({ error: `We cannot connect ${provider} yet.` }, { status: 400 });
     }
   } catch (error) {
     logOauth("start failed", { provider, message: error instanceof Error ? error.message : "unknown" });

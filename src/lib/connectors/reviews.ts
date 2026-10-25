@@ -2,6 +2,7 @@ import { env } from "../config";
 import { getJson } from "./http";
 import { parseFeeds } from "./rss";
 import type { Connector, InboxPayload, RawMention } from "./types";
+import { parsePublishedAt } from "../listen/dates";
 
 export const podcastsConnector: Connector = {
   id: "PODCASTS",
@@ -125,34 +126,47 @@ export const appStoreConnector: Connector = {
   capabilities: [],
   isConfigured: () => true,
   async search(ctx) {
-    const ids = ctx.projectConfig?.appStoreIds ?? [];
-    const out: RawMention[] = [];
-    for (const id of ids.slice(0, 6)) {
-      const items = await parseFeeds("APP_STORE", [
-        `https://itunes.apple.com/us/rss/customerreviews/id=${encodeURIComponent(id)}/sortBy=mostRecent/xml`,
-      ]);
-      out.push(
-        ...items.map((m) => ({
-          ...m,
-          source: "APP_STORE" as const,
-          kind: "review",
-        })),
+    try {
+      const ids = ctx.projectConfig?.appStoreIds ?? [];
+      const out: RawMention[] = [];
+      for (const id of ids.slice(0, 6)) {
+        const items = await parseFeeds("APP_STORE", [
+          `https://itunes.apple.com/us/rss/customerreviews/id=${encodeURIComponent(id)}/sortBy=mostRecent/xml`,
+        ]);
+        out.push(
+          ...items.map((m) => ({
+            ...m,
+            source: "APP_STORE" as const,
+            kind: "review",
+            publishedAt: parsePublishedAt(m.publishedAt),
+          })),
+        );
+      }
+      if (ids.length) return out;
+      const data = await getJson<{ results?: { trackId: number; trackName?: string; description?: string; artistName?: string; trackViewUrl?: string; releaseDate?: string }[] }>(
+        `https://itunes.apple.com/search?term=${encodeURIComponent(ctx.query)}&entity=software&limit=15`,
       );
+      return (data.results ?? []).flatMap((app) => {
+        try {
+          return [
+            {
+              source: "APP_STORE" as const,
+              externalId: String(app.trackId),
+              url: app.trackViewUrl ?? `https://apps.apple.com/app/id${app.trackId}`,
+              title: app.trackName,
+              content: app.description ?? app.trackName ?? "",
+              authorName: app.artistName,
+              publishedAt: parsePublishedAt(app.releaseDate),
+              kind: "app",
+            },
+          ];
+        } catch {
+          return [];
+        }
+      });
+    } catch {
+      return [];
     }
-    if (ids.length) return out;
-    const data = await getJson<{ results?: { trackId: number; trackName?: string; description?: string; artistName?: string; trackViewUrl?: string; releaseDate?: string }[] }>(
-      `https://itunes.apple.com/search?term=${encodeURIComponent(ctx.query)}&entity=software&limit=15`,
-    );
-    return (data.results ?? []).map((app) => ({
-      source: "APP_STORE" as const,
-      externalId: String(app.trackId),
-      url: app.trackViewUrl ?? `https://apps.apple.com/app/id${app.trackId}`,
-      title: app.trackName,
-      content: app.description ?? app.trackName ?? "",
-      authorName: app.artistName,
-      publishedAt: app.releaseDate ? new Date(app.releaseDate) : new Date(),
-      kind: "app",
-    }));
   },
 };
 

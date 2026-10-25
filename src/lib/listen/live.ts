@@ -8,6 +8,8 @@ import { dedupeMentions, influenceScore } from "./dedupe";
 import { mentionMatches, searchQueries, type KeywordRule } from "./query";
 import { liveSourcePlan, type LiveSourceStatus } from "./sources";
 import { serpUsageSummary } from "./serpapi";
+import { isValidDate, parsePublishedAt, safeIso } from "./dates";
+import { tokenOf } from "@/lib/crypto";
 
 export type LiveHit = {
   source: Source;
@@ -22,6 +24,7 @@ export type LiveHit = {
   language?: string;
   influence: number;
   reach: number;
+  kind?: string;
 };
 
 export type LiveProgress = {
@@ -60,7 +63,7 @@ export async function searchOneSource(input: {
       projectId: input.projectId,
       workspaceId: input.workspaceId,
       projectConfig: input.config,
-      accessToken: input.accessToken,
+      accessToken: tokenOf(input.accessToken),
       accountId: input.accountId,
       accountExternalId: input.accountExternalId,
       purpose: "live",
@@ -70,7 +73,8 @@ export async function searchOneSource(input: {
   }
   return dedupeMentions(
     out.filter((mention) => {
-      if (mention.publishedAt && mention.publishedAt < since) return false;
+      mention.publishedAt = parsePublishedAt(mention.publishedAt);
+      if (isValidDate(mention.publishedAt) && mention.publishedAt < since) return false;
       return mentionMatches(`${mention.title ?? ""} ${mention.content}`, input.rule);
     }),
   );
@@ -88,11 +92,12 @@ export async function toLiveHit(mention: RawMention): Promise<LiveHit> {
     content: mention.content,
     authorName: mention.authorName,
     authorHandle: mention.authorHandle,
-    publishedAt: mention.publishedAt.toISOString(),
+    publishedAt: safeIso(parsePublishedAt(mention.publishedAt)),
     sentiment: sentiment.sentiment,
     language: language.language,
     influence: influenceScore(mention),
     reach: mention.reach ?? mention.viewCount ?? mention.followerCount ?? 0,
+    kind: mention.kind,
   };
 }
 
@@ -144,7 +149,7 @@ export async function runLiveSearch(input: {
         workspaceId: input.workspaceId,
         projectId: input.projectId,
         config: input.config,
-        accessToken: account?.accessToken ?? undefined,
+        accessToken: tokenOf(account?.accessToken),
         accountId: account?.id,
         accountExternalId: account?.externalId ?? undefined,
       });
@@ -152,7 +157,14 @@ export async function runLiveSearch(input: {
       const unique = dedupeMentions(found).filter((mention) => !seen.has(`${mention.source}:${mention.externalId}`));
       all.push(...unique);
       const hits = [];
-      for (const mention of unique) hits.push(await toLiveHit(mention));
+      for (const mention of unique) {
+        try {
+          mention.publishedAt = parsePublishedAt(mention.publishedAt);
+          hits.push(await toLiveHit(mention));
+        } catch {
+          // one bad mention must not fail the source
+        }
+      }
       await input.onProgress?.({
         type: "hits",
         progress: { id: row.id, name: row.name, nameAr: row.nameAr, status: "done", found: unique.length },

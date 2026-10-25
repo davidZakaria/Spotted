@@ -12,6 +12,11 @@ export const appConfig = {
   url: env("APP_URL", "http://127.0.0.1:4721"),
   authSecret: env("AUTH_SECRET", "spotted-dev-secret-change-in-production-please"),
   redisUrl: env("REDIS_URL", "redis://127.0.0.1:6379"),
+  seedDemo: envFlag("SEED_DEMO"),
+  signupMode: env("SIGNUP_MODE"),
+  sessionDays: Math.max(1, Number(env("SESSION_DAYS", "7")) || 7),
+  loginMaxAttempts: Math.max(3, Number(env("LOGIN_MAX_ATTEMPTS", "8")) || 8),
+  loginLockoutMinutes: Math.max(5, Number(env("LOGIN_LOCKOUT_MINUTES", "15")) || 15),
   webSearchProvider: (env("WEB_SEARCH_PROVIDER", "brave") === "serpapi"
     ? "serpapi"
     : "brave") as "brave" | "serpapi",

@@ -7,7 +7,7 @@ import { truncate } from "@/lib/utils";
 type MentionLike = Pick<
   Mention,
   "id" | "url" | "title" | "content" | "authorName" | "authorHandle" | "source" | "sentiment" | "publishedAt" | "language"
-> & { project?: { name: string } };
+> & { project?: { name: string }; kind?: string | null };
 
 export function MentionCard({
   mention,
@@ -36,7 +36,14 @@ export function MentionCard({
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
               <span className="font-medium text-ink">{author}</span>
-              <span>on <PlatformName id={mention.source as Source} locale={locale} /></span>
+              <span>
+                on <PlatformName id={mention.source as Source} locale={locale} />
+                {mention.source === "REDDIT" && mention.kind === "via_google"
+                  ? locale === "ar"
+                    ? " (عبر جوجل)"
+                    : " (via Google)"
+                  : null}
+              </span>
               {mention.project ? <span>· {mention.project.name}</span> : null}
               <span>· {when}</span>
             </div>

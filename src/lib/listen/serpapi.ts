@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { env } from "@/lib/config";
 import { getJson } from "@/lib/connectors/http";
 import type { RawMention, Source } from "@/lib/connectors/types";
+import { parsePublishedAt } from "./dates";
 
 export const SERPAPI_SOURCE: Source = "WEB_SEARCH";
 export const SERPAPI_SCHEDULED_PER_KEYWORD = 2;
@@ -104,8 +105,50 @@ export async function recordSerpCall(input: {
   });
 }
 
-type SerpOrganic = { title?: string; link?: string; snippet?: string; date?: string };
-type SerpNews = { title?: string; link?: string; snippet?: string; date?: string; source?: { name?: string } };
+export type SerpOrganic = { title?: string; link?: string; snippet?: string; date?: string };
+export type SerpNews = {
+  title?: string;
+  link?: string;
+  snippet?: string;
+  date?: string;
+  source?: string | { name?: string };
+};
+
+export function newsSourceName(source: SerpNews["source"]): string | undefined {
+  if (!source) return undefined;
+  return typeof source === "string" ? source : source.name;
+}
+
+export function mentionsFromSerpPayload(
+  data: { organic_results?: SerpOrganic[]; news_results?: SerpNews[]; error?: string },
+  input: { engine: "google" | "google_news"; query: string; source: Source; fetchedAt?: Date },
+): RawMention[] {
+  if (data.error) throw new Error(data.error);
+  const fetchedAt = input.fetchedAt ?? new Date();
+  const rows = input.engine === "google_news" ? data.news_results ?? [] : data.organic_results ?? [];
+  const out: RawMention[] = [];
+  rows.forEach((row, index) => {
+    try {
+      const link = "link" in row ? row.link : undefined;
+      const title = row.title;
+      if (!link && !title) return;
+      out.push({
+        source: input.source,
+        externalId: link || `serp:${input.engine}:${input.query}:${index}`,
+        url: link || "",
+        title,
+        content: row.snippet ?? title ?? "",
+        authorName: input.engine === "google_news" ? newsSourceName((row as SerpNews).source) : undefined,
+        publishedAt: parsePublishedAt(row.date, fetchedAt),
+        kind: input.engine === "google_news" ? "article" : "web",
+        raw: { ...row, date: row.date ?? null },
+      });
+    } catch {
+      // one bad SerpAPI row must not fail the source
+    }
+  });
+  return out;
+}
 
 export async function fetchSerpResults(input: {
   query: string;
@@ -133,19 +176,11 @@ export async function fetchSerpResults(input: {
       num: String(Math.min(input.limit ?? 10, 10)),
     })}`,
   );
-  if (data.error) throw new Error(data.error);
-  const rows = input.engine === "google_news" ? data.news_results ?? [] : data.organic_results ?? [];
-  return rows.map((row, index) => ({
+  return mentionsFromSerpPayload(data, {
+    engine: input.engine,
+    query: input.query,
     source: input.source,
-    externalId: row.link || `serp:${input.engine}:${input.query}:${index}`,
-    url: row.link || "",
-    title: row.title,
-    content: row.snippet ?? row.title ?? "",
-    authorName: input.engine === "google_news" ? (row as SerpNews).source?.name : undefined,
-    publishedAt: row.date ? new Date(row.date) : new Date(),
-    kind: input.engine === "google_news" ? "article" : "web",
-    raw: row,
-  }));
+  });
 }
 
 export async function runSerpSearch(input: {

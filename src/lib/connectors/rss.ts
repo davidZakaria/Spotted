@@ -1,5 +1,6 @@
 import Parser from "rss-parser";
 import type { Connector, ConnectorContext, RawMention, Source } from "./types";
+import { parsePublishedAt } from "../listen/dates";
 
 const parser = new Parser({ timeout: 12000 });
 
@@ -24,7 +25,7 @@ export async function parseFeeds(
           title: item.title,
           content: item.contentSnippet || item.content || item.title || "",
           authorName: item.creator || feed.title,
-          publishedAt: item.isoDate ? new Date(item.isoDate) : new Date(),
+          publishedAt: parsePublishedAt(item.isoDate ?? item.pubDate),
           kind: "article",
           raw: { feed: feed.title, url },
         });

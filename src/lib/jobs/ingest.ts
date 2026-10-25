@@ -1,5 +1,7 @@
 import type { Keyword, Source } from "@prisma/client";
 import { prisma } from "../db";
+import { isValidDate, parsePublishedAt } from "../listen/dates";
+import { tokenOf } from "../crypto";
 import { detectLanguage } from "../language";
 import { analyzeSentiment, extractTopics } from "../sentiment";
 import { getConnector, KEYLESS_DEFAULTS } from "../connectors/registry";
@@ -78,7 +80,7 @@ export async function persistMentions(
           authorName: mention.authorName,
           authorHandle: mention.authorHandle,
           authorUrl: mention.authorUrl,
-          publishedAt: mention.publishedAt,
+          publishedAt: parsePublishedAt(mention.publishedAt),
           language: lang.language,
           direction: lang.direction,
           reach: mention.reach ?? 0,
@@ -185,7 +187,7 @@ export async function ingestProject(projectId: string) {
               projectId: project.id,
               workspaceId: project.workspaceId,
               projectConfig: config,
-              accessToken: account?.accessToken ?? undefined,
+              accessToken: tokenOf(account?.accessToken),
               accountId: account?.id,
               accountExternalId: account?.externalId ?? undefined,
               limit: 40,
@@ -195,7 +197,8 @@ export async function ingestProject(projectId: string) {
             const found = await connector.search(ctx);
             for (const mention of found) {
               if (!mentionMatches(`${mention.title ?? ""} ${mention.content}`, rule)) continue;
-              if (mention.publishedAt && mention.publishedAt < since) continue;
+              mention.publishedAt = parsePublishedAt(mention.publishedAt);
+              if (isValidDate(mention.publishedAt) && mention.publishedAt < since) continue;
               collected.push({ mention, keywordId: keyword?.id });
             }
             if (connector.trackAccounts) {
