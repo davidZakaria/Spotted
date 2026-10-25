@@ -5,6 +5,31 @@ import { analyzeSentiment, extractTopics } from "../sentiment";
 import { getConnector, KEYLESS_DEFAULTS } from "../connectors/registry";
 import type { ProjectConfig, RawMention } from "../connectors/types";
 
+export function mergeConnectedSources(
+  sources: Source[],
+  accounts: { platform: Source; isMock: boolean; externalId?: string | null }[],
+): Source[] {
+  const next = [...sources];
+  for (const platform of ["FACEBOOK", "INSTAGRAM"] as Source[]) {
+    const linked = accounts.some((account) => account.platform === platform && !account.isMock && account.externalId);
+    if (linked && !next.includes(platform)) next.push(platform);
+  }
+  return next;
+}
+
+export function pageIdsFromAccounts(
+  existing: string[] | undefined,
+  accounts: { platform: Source; isMock: boolean; externalId?: string | null }[],
+  platform: Source,
+) {
+  return [
+    ...new Set([
+      ...(existing ?? []),
+      ...accounts.filter((account) => account.platform === platform && !account.isMock && account.externalId).map((account) => String(account.externalId)),
+    ]),
+  ];
+}
+
 export async function ingestProject(projectId: string) {
   const project = await prisma.project.findUnique({
     where: { id: projectId },
@@ -12,7 +37,12 @@ export async function ingestProject(projectId: string) {
   });
   if (!project) throw new Error("Project not found");
   const config = (project.config ?? {}) as ProjectConfig;
-  const sources = (config.sources?.length ? config.sources : KEYLESS_DEFAULTS) as Source[];
+  const liveAccounts = project.workspace.accounts;
+  const sources = mergeConnectedSources(
+    (config.sources?.length ? config.sources : KEYLESS_DEFAULTS) as Source[],
+    liveAccounts,
+  );
+  config.instagramUserIds = pageIdsFromAccounts(config.instagramUserIds, liveAccounts, "INSTAGRAM");
   const phrases = project.keywords.map((k) => k.phrase);
   if (project.entities.length) {
     config.competitors = [
@@ -45,25 +75,28 @@ export async function ingestProject(projectId: string) {
   for (const source of sources) {
     const connector = getConnector(source);
     if (!connector) continue;
-    const account = project.workspace.accounts.find((a) => a.platform === source && !a.isMock);
+    const accounts = liveAccounts.filter((account) => account.platform === source && !account.isMock);
+    const passes = accounts.length ? accounts : [undefined];
     try {
-      for (const phrase of phrases.length ? phrases : [project.name]) {
-        const keyword = project.keywords.find((k) => k.phrase === phrase);
-        const ctx = {
-          query: phrase,
-          projectId: project.id,
-          workspaceId: project.workspaceId,
-          projectConfig: config,
-          accessToken: account?.accessToken ?? undefined,
-          accountId: account?.id,
-          accountExternalId: account?.externalId ?? undefined,
-          limit: 20,
-        };
-        const found = await connector.search(ctx);
-        for (const mention of found) collected.push({ mention, keywordId: keyword?.id });
-        if (connector.trackAccounts) {
-          const tracked = await connector.trackAccounts(ctx);
-          for (const mention of tracked) collected.push({ mention, keywordId: keyword?.id });
+      for (const account of passes) {
+        for (const phrase of phrases.length ? phrases : [project.name]) {
+          const keyword = project.keywords.find((k) => k.phrase === phrase);
+          const ctx = {
+            query: phrase,
+            projectId: project.id,
+            workspaceId: project.workspaceId,
+            projectConfig: config,
+            accessToken: account?.accessToken ?? undefined,
+            accountId: account?.id,
+            accountExternalId: account?.externalId ?? undefined,
+            limit: 20,
+          };
+          const found = await connector.search(ctx);
+          for (const mention of found) collected.push({ mention, keywordId: keyword?.id });
+          if (connector.trackAccounts) {
+            const tracked = await connector.trackAccounts(ctx);
+            for (const mention of tracked) collected.push({ mention, keywordId: keyword?.id });
+          }
         }
       }
     } catch (error) {

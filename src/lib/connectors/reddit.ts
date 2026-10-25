@@ -1,5 +1,5 @@
 import { env } from "../config";
-import { getJson } from "./http";
+import { getJson, HttpError } from "./http";
 import { cap, type Connector, type RawMention } from "./types";
 
 type RedditListing = {
@@ -45,25 +45,74 @@ function mapChild(child: NonNullable<RedditListing["data"]>["children"] extends 
   };
 }
 
-async function redditGet(path: string) {
+export function redditUserAgent(e: Record<string, string | undefined> = process.env) {
+  return e.REDDIT_USER_AGENT?.trim() || "web:spotted-listener:1.0.0 (by /u/spotted_app)";
+}
+
+export function redditPublicBases() {
+  return ["https://old.reddit.com", "https://www.reddit.com"] as const;
+}
+
+export function redditOauthPath(path: string) {
+  return path.replace(/\.json(?=\?|$)/, "");
+}
+
+function retryable(error: unknown) {
+  return error instanceof HttpError && (error.status === 401 || error.status === 403 || error.status === 429);
+}
+
+async function redditAppToken() {
   const id = env("REDDIT_CLIENT_ID");
   const secret = env("REDDIT_CLIENT_SECRET");
-  let headers: Record<string, string> = {};
-  let host = "https://www.reddit.com";
-  if (id && secret) {
-    const basic = Buffer.from(`${id}:${secret}`).toString("base64");
-    const token = await getJson<{ access_token: string }>("https://www.reddit.com/api/v1/access_token", {
-      method: "POST",
-      headers: {
-        Authorization: `Basic ${basic}`,
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: "grant_type=client_credentials",
-    });
-    headers = { Authorization: `Bearer ${token.access_token}` };
-    host = "https://oauth.reddit.com";
+  if (!id || !secret) return null;
+  const basic = Buffer.from(`${id}:${secret}`).toString("base64");
+  const token = await getJson<{ access_token?: string }>("https://www.reddit.com/api/v1/access_token", {
+    method: "POST",
+    headers: {
+      Authorization: `Basic ${basic}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+      "User-Agent": redditUserAgent(),
+    },
+    body: "grant_type=client_credentials",
+  });
+  return token.access_token ?? null;
+}
+
+async function redditGet<T = RedditListing>(path: string): Promise<T> {
+  const ua = redditUserAgent();
+  const errors: HttpError[] = [];
+
+  try {
+    const accessToken = await redditAppToken();
+    if (accessToken) {
+      try {
+        return await getJson<T>(`https://oauth.reddit.com${redditOauthPath(path)}`, {
+          headers: { Authorization: `Bearer ${accessToken}`, "User-Agent": ua },
+        });
+      } catch (error) {
+        if (!retryable(error)) throw error;
+        if (error instanceof HttpError) errors.push(error);
+      }
+    }
+  } catch (error) {
+    if (!retryable(error)) throw error;
+    if (error instanceof HttpError) errors.push(error);
   }
-  return getJson<RedditListing>(`${host}${path}`, { headers });
+
+  for (const host of redditPublicBases()) {
+    try {
+      return await getJson<T>(`${host}${path}`, { headers: { "User-Agent": ua } });
+    } catch (error) {
+      if (!retryable(error)) throw error;
+      if (error instanceof HttpError) errors.push(error);
+    }
+  }
+
+  throw new HttpError(
+    "Reddit blocked this server. Add REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET (create a script app at reddit.com/prefs/apps) and set REDDIT_USER_AGENT to web:spotted:1.0.0 (by /u/your_username).",
+    403,
+    errors[0]?.body,
+  );
 }
 
 export const redditConnector: Connector = {
@@ -90,8 +139,8 @@ export const redditConnector: Connector = {
   },
   async fetchComments(ctx) {
     const id = ctx.externalId.replace(/^t3_/, "");
-    const data = await getJson<unknown>(`https://www.reddit.com/comments/${id}.json?limit=20`);
-    const listing = Array.isArray(data) ? (data[1] as RedditListing) : undefined;
+    const data = await redditGet<unknown>(`/comments/${id}.json?limit=20`);
+    const listing = Array.isArray(data) ? (data[1] as RedditListing) : (data as RedditListing | undefined);
     return (listing?.data?.children ?? [])
       .filter((c) => c.data?.body)
       .map((c) => ({ ...mapChild(c, "comment"), parentExternalId: ctx.externalId }));

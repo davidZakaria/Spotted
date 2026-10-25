@@ -1,41 +1,132 @@
-import { Source } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { env, oauthRedirect } from "@/lib/config";
 import { getJson } from "@/lib/connectors/http";
+import {
+  exchangeMetaUserToken,
+  exchangeThreadsUserToken,
+  listManagedPages,
+  socialRowsFromPages,
+  threadsProfile,
+} from "@/lib/connectors/meta-oauth";
 import { redirectTo } from "@/lib/redirects";
+import { logOauth } from "@/lib/oauth-errors";
+import type { Source } from "@prisma/client";
 
 const PLATFORM: Record<string, Source> = {
-  meta: "FACEBOOK",
   x: "X",
   linkedin: "LINKEDIN",
   google: "GOOGLE_BUSINESS",
 };
 
+async function upsertAccount(data: {
+  workspaceId: string;
+  platform: Source;
+  displayName: string;
+  handle: string;
+  externalId?: string | null;
+  accessToken?: string;
+  refreshToken?: string;
+  status?: string;
+  metadata?: Record<string, unknown>;
+}) {
+  const existing = data.externalId
+    ? await prisma.socialAccount.findFirst({
+        where: { workspaceId: data.workspaceId, platform: data.platform, externalId: data.externalId },
+      })
+    : null;
+  const payload = {
+    displayName: data.displayName,
+    handle: data.handle,
+    externalId: data.externalId ?? undefined,
+    accessToken: data.accessToken,
+    refreshToken: data.refreshToken,
+    status: data.status ?? "connected",
+    isMock: false,
+    metadata: data.metadata as never,
+  };
+  if (existing) {
+    return prisma.socialAccount.update({ where: { id: existing.id }, data: payload });
+  }
+  return prisma.socialAccount.create({
+    data: {
+      workspaceId: data.workspaceId,
+      platform: data.platform,
+      ...payload,
+    },
+  });
+}
+
 export async function GET(req: Request, { params }: { params: Promise<{ provider: string }> }) {
   const { provider } = await params;
   const url = new URL(req.url);
   const code = url.searchParams.get("code");
+  const denied = url.searchParams.get("error");
   const stateRaw = url.searchParams.get("state");
-  if (!code || !stateRaw) return redirectTo("/app/settings/platforms?error=oauth");
-  const state = JSON.parse(Buffer.from(stateRaw, "base64url").toString());
-  const redirectUri = oauthRedirect(provider);
-  let accessToken = "";
-  let refreshToken: string | undefined;
-  let displayName = provider;
-  let handle = provider;
-  let externalId: string | undefined;
+  logOauth("callback", { provider, hasCode: Boolean(code), denied: denied ?? null });
+
+  if (denied) {
+    logOauth("callback denied", { provider, denied, description: url.searchParams.get("error_description") });
+    return redirectTo("/app/settings/platforms?error=oauth");
+  }
+  if (!code || !stateRaw) {
+    logOauth("callback missing code or state", { provider });
+    return redirectTo("/app/settings/platforms?error=oauth");
+  }
+
+  let workspaceId = "";
+  try {
+    const state = JSON.parse(Buffer.from(stateRaw, "base64url").toString()) as { workspaceId?: string };
+    workspaceId = String(state.workspaceId ?? "");
+  } catch {
+    logOauth("callback bad state", { provider });
+    return redirectTo("/app/settings/platforms?error=oauth");
+  }
+  if (!workspaceId) return redirectTo("/app/settings/platforms?error=oauth");
 
   try {
     if (provider === "meta") {
-      const token = await getJson<{ access_token: string }>(
-        `https://graph.facebook.com/v21.0/oauth/access_token?client_id=${env("META_APP_ID")}&client_secret=${env("META_APP_SECRET")}&redirect_uri=${encodeURIComponent(redirectUri)}&code=${code}`,
-      );
-      accessToken = token.access_token;
-      const me = await getJson<{ name?: string; id?: string }>(`https://graph.facebook.com/v21.0/me?access_token=${accessToken}`);
-      displayName = me.name ?? "Facebook";
-      handle = me.id ?? "facebook";
-      externalId = me.id;
-    } else if (provider === "x") {
+      const userToken = await exchangeMetaUserToken(code);
+      const pages = await listManagedPages(userToken);
+      if (!pages.length) {
+        logOauth("callback no pages", { provider, workspaceId });
+        return redirectTo("/app/settings/platforms?error=no_pages");
+      }
+      const rows = socialRowsFromPages(workspaceId, pages, userToken);
+      for (const row of rows) {
+        await upsertAccount(row);
+      }
+      logOauth("callback stored pages", { provider, pages: pages.length, rows: rows.length });
+      return redirectTo(`/app/settings/platforms?connected=1&pages=${pages.length}`);
+    }
+
+    if (provider === "threads") {
+      const token = await exchangeThreadsUserToken(code);
+      const profile = await threadsProfile(token.accessToken);
+      const externalId = profile.id || token.userId;
+      if (!externalId) {
+        logOauth("callback no threads profile", { provider, workspaceId });
+        return redirectTo("/app/settings/platforms?error=oauth_exchange");
+      }
+      await upsertAccount({
+        workspaceId,
+        platform: "THREADS",
+        displayName: profile.name || profile.username || "Threads",
+        handle: profile.username || externalId,
+        externalId,
+        accessToken: token.accessToken,
+      });
+      logOauth("callback stored threads", { provider });
+      return redirectTo("/app/settings/platforms?connected=1");
+    }
+
+    const redirectUri = oauthRedirect(provider);
+    let accessToken = "";
+    let refreshToken: string | undefined;
+    let displayName = provider;
+    let handle = provider;
+    let externalId: string | undefined;
+
+    if (provider === "x") {
       const basic = Buffer.from(`${env("TWITTER_CLIENT_ID")}:${env("TWITTER_CLIENT_SECRET")}`).toString("base64");
       const token = await getJson<{ access_token: string; refresh_token?: string }>("https://api.x.com/2/oauth2/token", {
         method: "POST",
@@ -82,22 +173,27 @@ export async function GET(req: Request, { params }: { params: Promise<{ provider
       refreshToken = token.refresh_token;
       displayName = "Google account";
       handle = "google";
+    } else {
+      return redirectTo("/app/settings/platforms?error=missing_oauth_env");
     }
-  } catch {
-    return redirectTo("/app/settings/platforms?error=oauth_exchange");
-  }
 
-  await prisma.socialAccount.create({
-    data: {
-      workspaceId: state.workspaceId,
+    await upsertAccount({
+      workspaceId,
       platform: PLATFORM[provider] ?? "X",
       displayName,
       handle,
       externalId,
       accessToken,
       refreshToken,
-      status: "connected",
-    },
-  });
-  return redirectTo("/app/settings/platforms?connected=1");
+    });
+    logOauth("callback stored account", { provider });
+    return redirectTo("/app/settings/platforms?connected=1");
+  } catch (error) {
+    logOauth("callback exchange failed", {
+      provider,
+      message: error instanceof Error ? error.message : "unknown",
+      status: typeof error === "object" && error && "status" in error ? (error as { status: number }).status : undefined,
+    });
+    return redirectTo("/app/settings/platforms?error=oauth_exchange");
+  }
 }

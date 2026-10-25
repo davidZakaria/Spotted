@@ -49,7 +49,7 @@ export const SOURCE_CATALOG: SourceMeta[] = [
     family: "Reddit",
     docsUrl: "https://www.reddit.com/dev/api",
     keyless: true,
-    envVars: ["REDDIT_CLIENT_ID", "REDDIT_CLIENT_SECRET"],
+    envVars: ["REDDIT_CLIENT_ID", "REDDIT_CLIENT_SECRET", "REDDIT_USER_AGENT"],
     capabilities: [
       cap("keyword_search", true, "none", "Public JSON search; OAuth recommended for higher rate limits."),
       cap("hashtag_search", false, "none", "Reddit does not use hashtags."),
@@ -68,7 +68,10 @@ export const SOURCE_CATALOG: SourceMeta[] = [
       cap("own_analytics", true, "oauth", "Karma and post performance for the authenticated user."),
       cap("upload_media", true, "oauth"),
     ],
-    notes: ["Keyless search uses reddit.com public JSON. Own-account posting and inbox require OAuth."],
+    notes: [
+      "Keyless search uses old.reddit.com then www.reddit.com. Datacenter IPs are often blocked; add REDDIT_CLIENT_ID / REDDIT_CLIENT_SECRET (script app) to use oauth.reddit.com.",
+      "Own-account posting and inbox require user OAuth.",
+    ],
   },
   {
     id: "YOUTUBE",
@@ -289,7 +292,9 @@ export const SOURCE_CATALOG: SourceMeta[] = [
       cap("own_analytics", true, "oauth"),
       cap("upload_media", true, "oauth"),
     ],
-    notes: ["Search and public profile tracking are keyless via public.api.bsky.app."],
+    notes: [
+      "Search tries api.bsky.app then public.api.bsky.app. Some datacenter IPs get 403; add BLUESKY_HANDLE and BLUESKY_APP_PASSWORD if search stays empty.",
+    ],
   },
   {
     id: "MASTODON",

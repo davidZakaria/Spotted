@@ -49,17 +49,17 @@ Every source implements the same interface: keyword/hashtag/mention listening, p
 
 | Source | Listening without keys | Needs | Important API limits |
 | --- | --- | --- | --- |
-| Reddit | Keyword + subreddit + comments | OAuth to post / inbox | — |
+| Reddit | Keyword + subreddit + comments | OAuth to post / inbox. **Datacenter IPs often get 403** — add `REDDIT_CLIENT_ID` / `REDDIT_CLIENT_SECRET` (script app) and optional `REDDIT_USER_AGENT`. | — |
 | Hacker News | Keyword + author + comments | — | No write API |
 | RSS / news | Feed URLs | — | No comments |
 | Google News | RSS search | — | Index only |
 | Google Alerts | User-pasted alert RSS | — | You create the alert on Google |
-| Bluesky | Public search + profiles | App password to post | — |
+| Bluesky | Public search + profiles (`api.bsky.app`, then `public.api.bsky.app`) | App password to post, or if public AppView returns 403 | — |
 | Mastodon | Instance search / hashtags | OAuth to post / DMs | Search depends on the instance |
 | Podcasts | iTunes Search | Podcast Index keys for richer data | No comments |
 | Apple App Store | Public review RSS by app id | App Store Connect to reply | — |
 | Telegram | Public `t.me/s` channels | Bot token to post / inbox | No global search |
-| YouTube | — | `YOUTUBE_API_KEY`; OAuth for upload + Analytics | No DM API |
+| YouTube | Search with `YOUTUBE_API_KEY` | Google OAuth only to manage / upload to a channel | No DM API |
 | Web search | — | `BRAVE_SEARCH_API_KEY` (default) or `SERPAPI_API_KEY` | Not a social network |
 | Quora / forums | — | Same web-search keys (`site:quora.com`) | No official Quora API |
 | X | — | Bearer + OAuth | **Pay-per-use.** Workspace daily/monthly call and $ budgets are enforced. |
@@ -127,7 +127,9 @@ This is a **feature**, not a permission. Until App Review approves PPCA, Graph o
 - `instagram_manage_messages`
 - `pages_show_list` (the IG user is reached through a linked Page)
 
-OAuth starts at `/api/oauth/meta` and requests this set. Messenger inbox, Page ratings, hashtag search, Business Discovery, and Content Publishing each fail closed if a permission is missing.
+OAuth starts at `/api/oauth/meta` (Facebook Login dialog) and the callback is `${APP_URL}/api/oauth/meta/callback`. After the code exchange, Spotted upgrades to a long-lived user token, lists `/me/accounts`, and stores each Page (Page token + linked Instagram Business account) in `SocialAccount`. Ingest then pulls that Page’s posts, comments, and tagged mentions.
+
+Register the Meta redirect as `https://your-host/api/oauth/meta/callback`. Threads uses a separate start URL (`/api/oauth/threads`) and redirect `${APP_URL}/api/oauth/threads/callback`.
 
 ## Environment variables
 
@@ -147,8 +149,8 @@ Login, signup, and logout redirects are built from `APP_URL` / `NEXT_PUBLIC_APP_
 | LinkedIn | `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET` |
 | TikTok | `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET` |
 | Google | `GOOGLE_GBP_*`, `GOOGLE_TRENDS_ENABLED` |
-| Reddit | `REDDIT_CLIENT_ID`, `REDDIT_CLIENT_SECRET` (optional) |
-| Bluesky | `BLUESKY_HANDLE`, `BLUESKY_APP_PASSWORD` (publish) |
+| Reddit | `REDDIT_CLIENT_ID`, `REDDIT_CLIENT_SECRET`, `REDDIT_USER_AGENT` (optional; needed if public JSON returns 403) |
+| Bluesky | `BLUESKY_HANDLE`, `BLUESKY_APP_PASSWORD` (publish, or if public AppView returns 403) |
 | Mastodon | `MASTODON_INSTANCE`, `MASTODON_CLIENT_*` |
 | Pinterest / Telegram / Discord / Twitch / Snap | matching `*_CLIENT_*` / bot tokens |
 | Podcasts | `PODCAST_INDEX_API_KEY`, `PODCAST_INDEX_API_SECRET` |

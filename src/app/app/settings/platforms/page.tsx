@@ -5,26 +5,31 @@ import { instagramHashtagStatus } from "@/lib/connectors/quotas";
 import { prisma } from "@/lib/db";
 import { updateBudgetAction } from "@/lib/actions";
 import { Badge, Button, Card, Field, PageHeader } from "@/components/ui";
+import { ConnectButton } from "@/components/connect-button";
 import { ConnectHelp } from "@/components/connect-help";
 import { PlatformLogo } from "@/components/platform-logo";
 import { PLATFORMS } from "@/lib/platforms";
 import { formatUsd } from "@/lib/utils";
 import { t } from "@/lib/i18n";
-import type { Source } from "@prisma/client";
+import { oauthErrorCopy } from "@/lib/oauth-errors";
+import {
+  describeConnection,
+  hasAppKeys,
+  hasBlueskySession,
+  hasGoogleOAuth,
+  hasRedditApp,
+  hasYoutubeApiKey,
+  oauthPathFor,
+} from "@/lib/platform-status";
 
-const OAUTH: Partial<Record<Source, string>> = {
-  FACEBOOK: "/api/oauth/meta",
-  INSTAGRAM: "/api/oauth/meta",
-  THREADS: "/api/oauth/meta",
-  X: "/api/oauth/x",
-  LINKEDIN: "/api/oauth/linkedin",
-  YOUTUBE: "/api/oauth/google",
-  GOOGLE_BUSINESS: "/api/oauth/google",
-};
-
-export default async function PlatformsPage() {
+export default async function PlatformsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string; connected?: string; pages?: string }>;
+}) {
   const session = await requireSession();
   const locale = session.locale === "ar" ? "ar" : "en";
+  const { error, connected, pages } = await searchParams;
   const sources = connectorStatus();
   const xUsage = await usageSummary(session.workspaceId, "X");
   const igAccount = await prisma.socialAccount.findFirst({
@@ -34,9 +39,32 @@ export default async function PlatformsPage() {
   const accounts = await prisma.socialAccount.findMany({
     where: { workspaceId: session.workspaceId },
   });
+  const errorText = oauthErrorCopy(error, locale);
+  const pageCount = Number(pages ?? 0);
+  const successText = connected
+    ? locale === "ar"
+      ? pageCount > 0
+        ? `تم ربط ${pageCount} صفحة. سنجمع المنشورات والتعليقات والإشارات.`
+        : "تم الربط. سنبدأ بجمع الإشارات."
+      : pageCount > 0
+        ? `Connected ${pageCount} Facebook Page${pageCount === 1 ? "" : "s"}. We will collect posts, comments, and mentions.`
+        : "Connected. We will start collecting mentions."
+    : null;
 
-  const ready = PLATFORMS.filter((p) => p.readyNow && p.id !== "GOOGLE_TRENDS");
-  const later = PLATFORMS.filter((p) => !p.readyNow);
+  const cards = PLATFORMS.filter((platform) => platform.id !== "GOOGLE_TRENDS").map((platform) => {
+    const status = sources.find((s) => s.id === platform.id);
+    const view = describeConnection({
+      platform: platform.id,
+      keyless: Boolean(status?.keyless),
+      hasAppKeys: hasAppKeys(platform.id),
+      accounts,
+      youtubeSearchWorks: hasYoutubeApiKey(),
+      youtubeOAuthReady: hasGoogleOAuth(),
+    });
+    return { platform, view, connectHref: view.showConnect ? oauthPathFor(platform.id) : undefined };
+  });
+  const working = cards.filter((card) => card.view.kind === "working");
+  const connectable = cards.filter((card) => card.view.kind !== "working");
 
   return (
     <div className="space-y-6">
@@ -47,6 +75,9 @@ export default async function PlatformsPage() {
           : "Some sites we can search right away. Others need you to tap Connect and allow access."}
         tip={locale === "ar" ? "اضغط «كيف أربط؟» لأي منصة لخطوات بسيطة." : "Tap How to connect on any platform for simple steps."}
       />
+
+      {errorText ? <p className="rounded-xl bg-bad/10 px-4 py-3 text-sm text-bad">{errorText}</p> : null}
+      {successText ? <p className="rounded-xl bg-good/10 px-4 py-3 text-sm text-good">{successText}</p> : null}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
@@ -77,17 +108,18 @@ export default async function PlatformsPage() {
       </div>
 
       <section className="space-y-3">
-        <h2 className="text-lg font-semibold">{locale === "ar" ? "يعمل الآن — بلا تسجيل" : "Works right now — no login"}</h2>
+        <h2 className="text-lg font-semibold">{locale === "ar" ? "يعمل الآن" : "Working now"}</h2>
         <div className="grid gap-3 md:grid-cols-2">
-          {ready.map((platform) => (
+          {working.map(({ platform, view }) => (
             <Card key={platform.id} className="flex items-start gap-3">
               <PlatformLogo id={platform.id} size={36} />
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="font-semibold">{locale === "ar" ? platform.nameAr : platform.name}</p>
-                  <Badge tone="good">{locale === "ar" ? "جاهز" : "Ready"}</Badge>
+                  <Badge tone={view.tone}>{locale === "ar" ? view.badgeAr : view.badge}</Badge>
                 </div>
                 <p className="mt-1 text-sm text-muted">{locale === "ar" ? platform.blurbAr : platform.blurb}</p>
+                <SearchBlockNote platformId={platform.id} locale={locale} />
                 <div className="mt-3"><ConnectHelp platform={platform} locale={locale} /></div>
               </div>
             </Card>
@@ -96,36 +128,52 @@ export default async function PlatformsPage() {
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-lg font-semibold">{locale === "ar" ? "يحتاج ربط حساب" : "Needs a connected account"}</h2>
+        <h2 className="text-lg font-semibold">{locale === "ar" ? "اربط حساباً" : "Connect an account"}</h2>
         <div className="grid gap-3 md:grid-cols-2">
-          {later.map((platform) => {
-            const status = sources.find((s) => s.id === platform.id);
-            const connected = accounts.some((account) => account.platform === platform.id && !account.isMock);
-            const live = status?.configured || connected;
-            return (
-              <Card key={platform.id} className="flex items-start gap-3">
-                <PlatformLogo id={platform.id} size={36} />
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="font-semibold">{locale === "ar" ? platform.nameAr : platform.name}</p>
-                    <Badge tone={live ? "good" : "warn"}>{live ? (locale === "ar" ? "متصل" : "Connected") : (locale === "ar" ? "غير متصل" : "Not connected")}</Badge>
-                  </div>
-                  <p className="mt-1 text-sm text-muted">{locale === "ar" ? platform.blurbAr : platform.blurb}</p>
-                  <p className="mt-1 text-xs text-muted">{locale === "ar" ? platform.connectHintAr : platform.connectHint}</p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {OAUTH[platform.id] ? (
-                      <a href={OAUTH[platform.id]} className="rounded-xl bg-accent px-3 py-1.5 text-xs font-semibold text-accent-ink">
-                        {locale === "ar" ? "ربط" : "Connect"}
-                      </a>
-                    ) : null}
-                    <ConnectHelp platform={platform} locale={locale} connectHref={OAUTH[platform.id]} />
-                  </div>
+          {connectable.map(({ platform, view, connectHref }) => (
+            <Card key={platform.id} className="flex items-start gap-3">
+              <PlatformLogo id={platform.id} size={36} />
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="font-semibold">{locale === "ar" ? platform.nameAr : platform.name}</p>
+                  <Badge tone={view.tone}>{locale === "ar" ? view.badgeAr : view.badge}</Badge>
                 </div>
-              </Card>
-            );
-          })}
+                <p className="mt-1 text-sm text-muted">{locale === "ar" ? platform.blurbAr : platform.blurb}</p>
+                <p className="mt-1 text-xs text-muted">{locale === "ar" ? platform.connectHintAr : platform.connectHint}</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {connectHref ? (
+                    <ConnectButton href={connectHref} label={locale === "ar" ? "ربط" : "Connect"} />
+                  ) : null}
+                  <ConnectHelp platform={platform} locale={locale} connectHref={connectHref} />
+                </div>
+              </div>
+            </Card>
+          ))}
         </div>
       </section>
     </div>
   );
+}
+
+function SearchBlockNote({ platformId, locale }: { platformId: string; locale: string }) {
+  const ar = locale === "ar";
+  if (platformId === "REDDIT" && !hasRedditApp()) {
+    return (
+      <p className="mt-1 text-xs text-muted">
+        {ar
+          ? "بعض الخوادم يحجبها ريديت. إن بقيت النتائج فارغة أضف REDDIT_CLIENT_ID و REDDIT_CLIENT_SECRET من reddit.com/prefs/apps."
+          : "Some servers are blocked by Reddit. If results stay empty, add REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET from reddit.com/prefs/apps."}
+      </p>
+    );
+  }
+  if (platformId === "BLUESKY" && !hasBlueskySession()) {
+    return (
+      <p className="mt-1 text-xs text-muted">
+        {ar
+          ? "إن بقي بحث بلوسكاي فارغاً من هذا الخادم، أضف BLUESKY_HANDLE و BLUESKY_APP_PASSWORD."
+          : "If Bluesky search stays empty from this server, add BLUESKY_HANDLE and BLUESKY_APP_PASSWORD."}
+      </p>
+    );
+  }
+  return null;
 }

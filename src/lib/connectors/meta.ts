@@ -26,7 +26,7 @@ type FbPost = {
   comments?: { summary?: { total_count?: number }; data?: { id: string; message?: string; from?: { name?: string }; created_time?: string }[] };
 };
 
-function mapPost(p: FbPost, source: "FACEBOOK" | "INSTAGRAM" | "THREADS"): RawMention {
+function mapPost(p: FbPost, source: "FACEBOOK" | "INSTAGRAM" | "THREADS", kind = "post"): RawMention {
   return {
     source,
     externalId: p.id,
@@ -43,9 +43,64 @@ function mapPost(p: FbPost, source: "FACEBOOK" | "INSTAGRAM" | "THREADS"): RawMe
       (p.shares?.count ?? 0) +
       (p.comments?.summary?.total_count ?? 0),
     reach: p.reactions?.summary?.total_count ?? 0,
-    kind: "post",
+    kind,
     raw: p,
   };
+}
+
+export function resolveFacebookPages(ctx: {
+  accessToken?: string;
+  accountExternalId?: string;
+  projectConfig?: { facebookPageIds?: string[] };
+}): { id: string; token: string }[] {
+  const pages: { id: string; token: string }[] = [];
+  const seen = new Set<string>();
+  const fallback = token(ctx.accessToken);
+  if (ctx.accountExternalId && ctx.accessToken) {
+    pages.push({ id: ctx.accountExternalId, token: ctx.accessToken });
+    seen.add(ctx.accountExternalId);
+  }
+  for (const id of ctx.projectConfig?.facebookPageIds ?? []) {
+    if (!id || seen.has(id) || !fallback) continue;
+    pages.push({ id, token: fallback });
+    seen.add(id);
+  }
+  return pages;
+}
+
+function matchesQuery(text: string, query?: string) {
+  if (!query) return true;
+  return text.toLowerCase().includes(query.toLowerCase());
+}
+
+async function listPagePosts(pageId: string, accessToken: string) {
+  return getJson<{ data?: FbPost[] }>(
+    graphUrl(`/${pageId}/posts`, {
+      access_token: accessToken,
+      fields: "id,message,story,created_time,permalink_url,from,shares,reactions.summary(true),comments.summary(true).limit(5)",
+      limit: "10",
+    }),
+  );
+}
+
+async function listPageTagged(pageId: string, accessToken: string) {
+  return getJson<{ data?: FbPost[] }>(
+    graphUrl(`/${pageId}/tagged`, {
+      access_token: accessToken,
+      fields: "id,message,story,created_time,permalink_url,from",
+      limit: "10",
+    }),
+  );
+}
+
+async function listPostComments(postId: string, accessToken: string) {
+  return getJson<{ data?: { id: string; message?: string; from?: { name?: string; id?: string }; created_time?: string }[] }>(
+    graphUrl(`/${postId}/comments`, {
+      access_token: accessToken,
+      fields: "id,message,from,created_time",
+      limit: "25",
+    }),
+  );
 }
 
 export const facebookConnector: Connector = {
@@ -57,22 +112,47 @@ export const facebookConnector: Connector = {
   capabilities: [],
   isConfigured: () => Boolean(env("META_APP_ID") || env("META_PAGE_ACCESS_TOKEN")),
   async search(ctx) {
-    const t = token(ctx.accessToken);
-    const pageIds = ctx.projectConfig?.facebookPageIds ?? [];
-    if (!t || !pageIds.length) return [];
+    const pages = resolveFacebookPages(ctx);
+    if (!pages.length) return [];
     const out: RawMention[] = [];
-    for (const pageId of pageIds.slice(0, 8)) {
-      const data = await getJson<{ data?: FbPost[] }>(
-        graphUrl(`/${pageId}/posts`, {
-          access_token: t,
-          fields: "id,message,story,created_time,permalink_url,from,shares,reactions.summary(true),comments.summary(true).limit(5)",
-          limit: "10",
-        }),
-      );
-      const posts = (data.data ?? []).filter((p) =>
-        ctx.query ? `${p.message ?? ""} ${p.story ?? ""}`.toLowerCase().includes(ctx.query.toLowerCase()) : true,
-      );
-      out.push(...posts.map((p) => mapPost(p, "FACEBOOK")));
+    for (const page of pages.slice(0, 8)) {
+      try {
+        const data = await listPagePosts(page.id, page.token);
+        const posts = (data.data ?? []).filter((p) => matchesQuery(`${p.message ?? ""} ${p.story ?? ""}`, ctx.query));
+        out.push(...posts.map((p) => mapPost(p, "FACEBOOK")));
+        for (const post of posts.slice(0, 8)) {
+          try {
+            const comments = await listPostComments(post.id, page.token);
+            for (const comment of comments.data ?? []) {
+              if (!matchesQuery(comment.message ?? "", ctx.query) && ctx.query) continue;
+              out.push({
+                source: "FACEBOOK",
+                externalId: comment.id,
+                url: `https://www.facebook.com/${comment.id}`,
+                content: comment.message ?? "",
+                authorName: comment.from?.name,
+                authorHandle: comment.from?.id,
+                publishedAt: comment.created_time ? new Date(comment.created_time) : new Date(),
+                kind: "comment",
+                parentExternalId: post.id,
+              });
+            }
+          } catch {
+            // comments permission may be missing
+          }
+        }
+      } catch {
+        // page token may be expired
+      }
+      try {
+        const tagged = await listPageTagged(page.id, page.token);
+        for (const post of tagged.data ?? []) {
+          if (!matchesQuery(`${post.message ?? ""} ${post.story ?? ""}`, ctx.query)) continue;
+          out.push(mapPost(post, "FACEBOOK", "mention"));
+        }
+      } catch {
+        // tagged feed needs pages_read_engagement
+      }
     }
     return out;
   },

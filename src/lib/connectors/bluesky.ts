@@ -1,5 +1,5 @@
 import { env } from "../config";
-import { getJson, postJson } from "./http";
+import { getJson, HttpError, postJson } from "./http";
 import type { Connector, RawMention } from "./types";
 
 type BskyPost = {
@@ -12,6 +12,8 @@ type BskyPost = {
   repostCount?: number;
 };
 
+export const BSKY_APPVIEWS = ["https://api.bsky.app", "https://public.api.bsky.app"] as const;
+
 async function session() {
   const handle = env("BLUESKY_HANDLE");
   const password = env("BLUESKY_APP_PASSWORD");
@@ -20,6 +22,36 @@ async function session() {
     "https://bsky.social/xrpc/com.atproto.server.createSession",
     { identifier: handle, password },
   );
+}
+
+function retryable(error: unknown) {
+  return error instanceof HttpError && (error.status === 401 || error.status === 403 || error.status === 429 || error.status === 404);
+}
+
+export async function bskyXrpc<T>(path: string) {
+  const suffix = path.startsWith("/") ? path : `/${path}`;
+  let last: unknown;
+  for (const host of BSKY_APPVIEWS) {
+    try {
+      return await getJson<T>(`${host}${suffix}`);
+    } catch (error) {
+      last = error;
+      if (!retryable(error)) throw error;
+    }
+  }
+  const sess = await session();
+  if (sess) {
+    return getJson<T>(`https://api.bsky.app${suffix}`, {
+      headers: { Authorization: `Bearer ${sess.accessJwt}` },
+    });
+  }
+  throw last instanceof HttpError
+    ? new HttpError(
+        "Bluesky public search is blocked from this server. Add BLUESKY_HANDLE and BLUESKY_APP_PASSWORD.",
+        last.status,
+        last.body,
+      )
+    : last;
 }
 
 export const blueskyConnector: Connector = {
@@ -31,8 +63,8 @@ export const blueskyConnector: Connector = {
   capabilities: [],
   isConfigured: () => true,
   async search(ctx) {
-    const data = await getJson<{ posts?: BskyPost[] }>(
-      `https://public.api.bsky.app/xrpc/app.bsky.feed.searchPosts?q=${encodeURIComponent(ctx.query)}&limit=${ctx.limit ?? 25}`,
+    const data = await bskyXrpc<{ posts?: BskyPost[] }>(
+      `/xrpc/app.bsky.feed.searchPosts?q=${encodeURIComponent(ctx.query)}&limit=${ctx.limit ?? 25}`,
     );
     return (data.posts ?? []).map((p) => ({
       source: "BLUESKY" as const,
@@ -58,8 +90,8 @@ export const blueskyConnector: Connector = {
     const out: RawMention[] = [];
     for (const handle of handles.slice(0, 6)) {
       try {
-        const data = await getJson<{ feed?: { post: BskyPost }[] }>(
-          `https://public.api.bsky.app/xrpc/app.bsky.feed.getAuthorFeed?actor=${encodeURIComponent(handle)}&limit=10`,
+        const data = await bskyXrpc<{ feed?: { post: BskyPost }[] }>(
+          `/xrpc/app.bsky.feed.getAuthorFeed?actor=${encodeURIComponent(handle)}&limit=10`,
         );
         for (const row of data.feed ?? []) {
           const p = row.post;

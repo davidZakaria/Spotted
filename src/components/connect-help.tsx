@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { PlatformInfo } from "@/lib/platforms";
 import { Button } from "@/components/ui";
+import { ConnectButton } from "@/components/connect-button";
 import { PlatformLogo } from "@/components/platform-logo";
 
 export function ConnectHelp({
@@ -50,11 +51,7 @@ export function ConnectHelp({
               ))}
             </ol>
             <div className="mt-5 flex flex-wrap gap-2">
-              {connectHref ? (
-                <a href={connectHref} className="inline-flex rounded-xl bg-accent px-3.5 py-2 text-sm font-medium text-accent-ink">
-                  {ar ? "ابدأ الربط" : "Start connecting"}
-                </a>
-              ) : null}
+              {connectHref ? <ConnectButton href={connectHref} label={ar ? "ابدأ الربط" : "Start connecting"} /> : null}
               <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
                 {ar ? "إغلاق" : "Close"}
               </Button>

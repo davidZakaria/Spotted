@@ -30,5 +30,6 @@ export const appConfig = {
 };
 
 export function oauthRedirect(provider: string) {
-  return `${appConfig.url}/api/oauth/${provider}/callback`;
+  const raw = env("NEXT_PUBLIC_APP_URL") || env("APP_URL") || "http://127.0.0.1:4721";
+  return `${raw.replace(/\/$/, "")}/api/oauth/${provider}/callback`;
 }
