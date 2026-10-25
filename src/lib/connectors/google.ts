@@ -3,6 +3,27 @@ import { getJson } from "./http";
 import { parseFeeds } from "./rss";
 import type { Connector, InboxPayload, RawMention } from "./types";
 
+export const NEWS_EDITIONS = [
+  { hl: "en-US", gl: "US", ceid: "US:en" },
+  { hl: "en-GB", gl: "GB", ceid: "GB:en" },
+  { hl: "ar", gl: "EG", ceid: "EG:ar" },
+  { hl: "ar", gl: "SA", ceid: "SA:ar" },
+  { hl: "ar", gl: "AE", ceid: "AE:ar" },
+] as const;
+
+export function newsEditionsFor(language?: string, country?: string) {
+  const lang = language?.toLowerCase();
+  const region = country?.toUpperCase();
+  let editions = NEWS_EDITIONS.filter((edition) => {
+    if (region) return edition.gl === region;
+    if (lang === "ar") return edition.hl === "ar";
+    if (lang === "en") return edition.hl.startsWith("en");
+    return true;
+  });
+  if (!editions.length) editions = [...NEWS_EDITIONS];
+  return editions.slice(0, 4);
+}
+
 export const googleNewsConnector: Connector = {
   id: "GOOGLE_NEWS",
   name: "Google News",
@@ -12,10 +33,30 @@ export const googleNewsConnector: Connector = {
   capabilities: [],
   isConfigured: () => true,
   async search(ctx) {
-    const hl = ctx.language === "ar" ? "ar" : "en-US";
-    const gl = ctx.language === "ar" ? "EG" : "US";
-    const url = `https://news.google.com/rss/search?q=${encodeURIComponent(ctx.query)}&hl=${hl}&gl=${gl}&ceid=${gl}:${hl.split("-")[0]}`;
-    return parseFeeds("GOOGLE_NEWS", [url]);
+    const editions = newsEditionsFor(ctx.language, ctx.country ?? ctx.projectConfig?.languages?.[0]);
+    const urls = editions.map(
+      (edition) =>
+        `https://news.google.com/rss/search?q=${encodeURIComponent(ctx.query)}&hl=${edition.hl}&gl=${edition.gl}&ceid=${edition.ceid}`,
+    );
+    const rss = await parseFeeds("GOOGLE_NEWS", urls);
+    try {
+      const { hasSerpApi, runSerpSearch } = await import("../listen/serpapi");
+      if (!hasSerpApi()) return rss;
+      const serp = await runSerpSearch({
+        query: ctx.query,
+        engine: "google_news",
+        purpose: ctx.purpose ?? "scheduled",
+        workspaceId: ctx.workspaceId,
+        projectId: ctx.projectId,
+        keywordKey: ctx.keywordKey,
+        language: ctx.language,
+        country: ctx.country,
+        source: "GOOGLE_NEWS",
+      });
+      return [...serp.mentions, ...rss];
+    } catch {
+      return rss;
+    }
   },
 };
 

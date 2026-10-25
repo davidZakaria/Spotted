@@ -1,14 +1,11 @@
 import { appConfig, env } from "../config";
 import { getJson } from "./http";
 import { assertBudget, recordUsage, warnProject } from "./usage";
-import type { Connector, RawMention, Source } from "./types";
+import { hasSerpApi, runSerpSearch } from "../listen/serpapi";
+import type { Connector, ConnectorContext, RawMention, Source } from "./types";
 
 type BraveResult = {
   web?: { results?: { title: string; url: string; description?: string; age?: string }[] };
-};
-
-type SerpResult = {
-  organic_results?: { title: string; link: string; snippet?: string; date?: string }[];
 };
 
 async function braveSearch(query: string, limit: number): Promise<RawMention[]> {
@@ -30,47 +27,50 @@ async function braveSearch(query: string, limit: number): Promise<RawMention[]> 
   }));
 }
 
-async function serpSearch(query: string, limit: number): Promise<RawMention[]> {
-  const key = env("SERPAPI_API_KEY");
-  if (!key) return [];
-  const data = await getJson<SerpResult>(
-    `https://serpapi.com/search.json?engine=google&q=${encodeURIComponent(query)}&api_key=${key}&num=${limit}`,
-  );
-  return (data.organic_results ?? []).map((r, i) => ({
-    source: "WEB_SEARCH" as const,
-    externalId: r.link || `serp:${query}:${i}`,
-    url: r.link,
-    title: r.title,
-    content: r.snippet ?? "",
-    publishedAt: r.date ? new Date(r.date) : new Date(),
-    kind: "article",
-    raw: r,
-  }));
-}
-
-async function runProvider(source: Source, query: string, ctx: { workspaceId?: string; projectId?: string; projectConfig?: { webSearchProvider?: string } }, site?: string) {
-  const provider = ctx.projectConfig?.webSearchProvider || appConfig.webSearchProvider;
+async function runProvider(source: Source, query: string, ctx: ConnectorContext, site?: string) {
   const q = site ? `${query} site:${site}` : query;
-  const budget = await assertBudget(ctx.workspaceId, source);
-  if (!budget.allowed) {
-    await warnProject(ctx.projectId, source, "budget", budget.reason ?? "budget");
+  const workspaceBudget = await assertBudget(ctx.workspaceId, source);
+  if (!workspaceBudget.allowed) {
+    await warnProject(ctx.projectId, source, "budget", workspaceBudget.reason ?? "budget");
     return [];
   }
-  const items = provider === "serpapi" ? await serpSearch(q, 10) : await braveSearch(q, 10);
-  if (provider === "brave" && !env("BRAVE_SEARCH_API_KEY") && env("SERPAPI_API_KEY")) {
-    const fallback = await serpSearch(q, 10);
-    await recordUsage({ workspaceId: ctx.workspaceId, source, endpoint: "serpapi.fallback" });
-    return fallback.map((m) => ({ ...m, source }));
+
+  const purpose = ctx.purpose ?? "scheduled";
+  if (hasSerpApi() && !site) {
+    const serp = await runSerpSearch({
+      query: q,
+      engine: "google",
+      purpose,
+      workspaceId: ctx.workspaceId,
+      projectId: ctx.projectId,
+      keywordKey: ctx.keywordKey,
+      language: ctx.language,
+      country: ctx.country,
+      source,
+    });
+    if (serp.mentions.length) {
+      await recordUsage({ workspaceId: ctx.workspaceId, source, endpoint: "serpapi.google" });
+      return serp.mentions;
+    }
+    if (serp.skipped) {
+      await warnProject(ctx.projectId, source, "serpapi_budget", serp.skipped);
+    }
   }
-  await recordUsage({ workspaceId: ctx.workspaceId, source, endpoint: `${provider}.search` });
-  return items.map((m) => ({ ...m, source }));
+
+  if (env("BRAVE_SEARCH_API_KEY")) {
+    const items = await braveSearch(q, 10);
+    await recordUsage({ workspaceId: ctx.workspaceId, source, endpoint: "brave.search" });
+    return items.map((item) => ({ ...item, source }));
+  }
+
+  return [];
 }
 
 export const webSearchConnector: Connector = {
   id: "WEB_SEARCH",
   name: "Web search",
   family: "Search",
-  docsUrl: "https://api.search.brave.com/app/documentation/web-search/get-started",
+  docsUrl: "https://serpapi.com/search-api",
   keyless: false,
   capabilities: [],
   isConfigured: () => Boolean(env("BRAVE_SEARCH_API_KEY") || env("SERPAPI_API_KEY")),
@@ -83,11 +83,14 @@ export const quoraConnector: Connector = {
   id: "QUORA",
   name: "Quora / forums",
   family: "Search",
-  docsUrl: "https://api.search.brave.com/app/documentation/web-search/get-started",
+  docsUrl: "https://serpapi.com/search-api",
   keyless: false,
   capabilities: [],
-  isConfigured: () => Boolean(env("BRAVE_SEARCH_API_KEY") || env("SERPAPI_API_KEY")),
+  isConfigured: () => Boolean(env("BRAVE_SEARCH_API_KEY")),
   async search(ctx) {
+    if (!env("BRAVE_SEARCH_API_KEY")) return [];
     return runProvider("QUORA", ctx.query, ctx, "quora.com");
   },
 };
+
+void appConfig;

@@ -36,7 +36,7 @@ npm test
 
 1. Sign up (or use the demo). First login opens a setup wizard: name your brand, add watch words, add competitors, pick platforms, see first results.
 2. Home summarizes the day: new mentions, mood, and the biggest spike — in plain language.
-3. Mentions, Analytics, Alerts, Publish, Inbox, Reports, and Settings are in the sidebar with short labels.
+3. Mentions is a live search: type any word and we query every working source right away (Reddit, news, YouTube, Bluesky, and more). Save it with **Keep watching this word** for Brand24-style rules (required/excluded words, Boolean, language, country, hyphen variants). A 30-day backfill runs, then the worker refreshes every 5 minutes.
 4. Connected platforms shows what works now versus what needs a login, with step-by-step help.
 5. Switch English / العربية. Dark and light themes. Arabic mention text renders right-to-left.
 6. Schedule a post (a practice account is used until you connect a real one) and export a spreadsheet or PDF.
@@ -82,7 +82,7 @@ Every source implements the same interface: keyword/hashtag/mention listening, p
 
 Google Custom Search JSON API is **closed to new customers** and **shuts down 1 January 2027**. Spotted does not use it.
 
-Set `WEB_SEARCH_PROVIDER=brave` (default) with `BRAVE_SEARCH_API_KEY`, or `WEB_SEARCH_PROVIDER=serpapi` with `SERPAPI_API_KEY`. The project can override the provider. Quora/forum listening uses the same provider with a `site:` filter.
+Set `SERPAPI_API_KEY` to search Google web and Google News (engines `google` and `google_news`). The free plan is 250 searches/month — set `SERPAPI_MONTHLY_LIMIT` (default 250). Spotted uses SerpAPI for **Search everywhere** and at most two scheduled refreshes per watched word per day, then falls back to RSS news and other keyless sources. Optional `BRAVE_SEARCH_API_KEY` covers extra web/Quora results without spending SerpAPI.
 
 ### X usage budgets
 
@@ -142,10 +142,10 @@ See `.env.example` for the full list. Grouped:
 Login, signup, and logout redirects are built from `APP_URL` / `NEXT_PUBLIC_APP_URL`, never from the incoming request host. Set both to the public URL people type in the browser.
 | Sentiment | `OPENAI_API_KEY`, `OPENAI_MODEL` (local EN+AR lexicon if unset) |
 | Alerts | `SMTP_*`, `SLACK_WEBHOOK_URL` |
-| Web search | `WEB_SEARCH_PROVIDER`, `BRAVE_SEARCH_API_KEY`, `SERPAPI_API_KEY` |
+| Web search | `SERPAPI_API_KEY`, `SERPAPI_MONTHLY_LIMIT` (default 250), `BRAVE_SEARCH_API_KEY` |
 | YouTube | `YOUTUBE_API_KEY`, `GOOGLE_OAUTH_*` |
 | X | `TWITTER_BEARER_TOKEN`, `TWITTER_CLIENT_ID`, `TWITTER_CLIENT_SECRET` |
-| Meta | `META_APP_ID`, `META_APP_SECRET`, `META_PAGE_ACCESS_TOKEN`, `THREADS_APP_*` |
+| Meta | `META_APP_ID`, `META_APP_SECRET`, `META_PAGE_ACCESS_TOKEN`, `THREADS_APP_*`, `META_EXTRA_SCOPES` (optional Instagram scopes) |
 | LinkedIn | `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET` |
 | TikTok | `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET` |
 | Google | `GOOGLE_GBP_*`, `GOOGLE_TRENDS_ENABLED` |

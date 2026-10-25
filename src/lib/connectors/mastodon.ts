@@ -55,7 +55,7 @@ export const mastodonConnector: Connector = {
       const base = instance.replace(/\/$/, "");
       try {
         const data = await getJson<{ statuses?: MastoStatus[] } | MastoStatus[]>(
-          `${base}/api/v2/search?q=${encodeURIComponent(ctx.query)}&type=statuses&resolve=true&limit=15`,
+          `${base}/api/v2/search?q=${encodeURIComponent(ctx.query)}&type=statuses&resolve=true&limit=${ctx.limit ?? 20}`,
         );
         const statuses = Array.isArray(data) ? data : data.statuses ?? [];
         out.push(...statuses.map(mapStatus));

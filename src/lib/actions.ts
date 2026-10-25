@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { Source, type AlertChannel, type AlertType, type Role } from "@prisma/client";
+import { Source, type AlertChannel, type AlertType, type MatchType, type Role } from "@prisma/client";
 import { prisma } from "./db";
 import { canAdmin, canEdit, requireSession } from "./auth";
 import { parseCsvList, uniqueSlug } from "./utils";
@@ -11,6 +11,7 @@ import { enqueue } from "./queue";
 import { KEYLESS_DEFAULTS } from "./connectors/registry";
 import { buildCsvReport, buildPdfReport } from "./reports";
 import { evaluateAlerts } from "./jobs/alerts";
+import { csvWords } from "./listen/query";
 
 export async function createProjectAction(formData: FormData) {
   const session = await requireSession();
@@ -48,6 +49,39 @@ export async function createProjectAction(formData: FormData) {
   if (!queued) await ingestProject(project.id);
   revalidatePath("/app");
   redirect(`/app/projects/${project.id}`);
+}
+
+export async function keepWatchingAction(formData: FormData) {
+  const session = await requireSession();
+  if (!canEdit(session.role)) throw new Error("You need editor access");
+  const projectId = String(formData.get("projectId") ?? "");
+  const phrase = String(formData.get("phrase") ?? "").trim();
+  if (!projectId || !phrase) throw new Error("Add a word to watch");
+  const project = await prisma.project.findFirst({
+    where: { id: projectId, workspaceId: session.workspaceId },
+  });
+  if (!project) throw new Error("Brand not found");
+  const data = {
+    matchType: (String(formData.get("matchType") ?? "CONTAINS") as MatchType) || "CONTAINS",
+    language: String(formData.get("language") ?? "") || null,
+    country: String(formData.get("country") ?? "") || null,
+    requiredWords: csvWords(String(formData.get("required") ?? "")),
+    excludedWords: csvWords(String(formData.get("excluded") ?? "")),
+    booleanQuery: String(formData.get("boolean") ?? "") || null,
+    synonyms: csvWords(String(formData.get("synonyms") ?? "")),
+    autoVariants: formData.get("autoVariants") !== "off",
+  };
+  const existing = await prisma.keyword.findFirst({ where: { projectId, phrase } });
+  if (existing) {
+    await prisma.keyword.update({ where: { id: existing.id }, data });
+  } else {
+    await prisma.keyword.create({ data: { projectId, phrase, ...data } });
+  }
+  const queued = await enqueue("ingest-project", { projectId });
+  if (!queued) await ingestProject(projectId);
+  revalidatePath("/app/mentions");
+  revalidatePath("/app/analytics");
+  revalidatePath(`/app/projects/${projectId}`);
 }
 
 export async function listenNowAction(projectId: string) {

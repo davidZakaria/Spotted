@@ -185,14 +185,20 @@ model Project {
 }
 
 model Keyword {
-  id        String    @id @default(cuid())
-  phrase    String
-  matchType MatchType @default(CONTAINS)
-  language  String?
-  projectId String
-  createdAt DateTime  @default(now())
-  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  mentions  Mention[]
+  id            String    @id @default(cuid())
+  phrase        String
+  matchType     MatchType @default(CONTAINS)
+  language      String?
+  country       String?
+  requiredWords String[]  @default([])
+  excludedWords String[]  @default([])
+  booleanQuery  String?
+  synonyms      String[]  @default([])
+  autoVariants  Boolean   @default(true)
+  projectId     String
+  createdAt     DateTime  @default(now())
+  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  mentions      Mention[]
 }
 
 model Mention {

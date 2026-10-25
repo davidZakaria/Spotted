@@ -25,10 +25,14 @@ export const hnConnector: Connector = {
   isConfigured: () => true,
   async search(ctx) {
     const q = encodeURIComponent(ctx.query);
-    const data = await getJson<{ hits?: HnHit[] }>(
-      `https://hn.algolia.com/api/v1/search_by_date?query=${q}&tags=(story,comment)&hitsPerPage=${ctx.limit ?? 25}`,
-    );
-    return (data.hits ?? []).map((h) => ({
+    const since = ctx.since ? Math.floor(ctx.since.getTime() / 1000) : 0;
+    const out: RawMention[] = [];
+    for (let page = 0; page < 2; page += 1) {
+      const data = await getJson<{ hits?: HnHit[] }>(
+        `https://hn.algolia.com/api/v1/search_by_date?query=${q}&tags=(story,comment)&hitsPerPage=${ctx.limit ?? 25}&page=${page}${since ? `&numericFilters=created_at_i>${since}` : ""}`,
+      );
+      out.push(
+        ...(data.hits ?? []).map((h) => ({
       source: "HACKER_NEWS" as const,
       externalId: h.objectID,
       url: h.url || `https://news.ycombinator.com/item?id=${h.objectID}`,
@@ -45,7 +49,11 @@ export const hnConnector: Connector = {
       kind: h.comment_text ? "comment" : "post",
       parentExternalId: h.story_id ? String(h.story_id) : undefined,
       raw: h,
-    }));
+    })),
+      );
+      if ((data.hits?.length ?? 0) < 10) break;
+    }
+    return out;
   },
   async trackAccounts(ctx) {
     const authors = ctx.projectConfig?.competitors ?? [];

@@ -1,9 +1,11 @@
-import type { Source } from "@prisma/client";
+import type { Keyword, Source } from "@prisma/client";
 import { prisma } from "../db";
 import { detectLanguage } from "../language";
 import { analyzeSentiment, extractTopics } from "../sentiment";
 import { getConnector, KEYLESS_DEFAULTS } from "../connectors/registry";
 import type { ProjectConfig, RawMention } from "../connectors/types";
+import { mentionMatches, ruleFromPhrase, searchQueries, type KeywordRule } from "../listen/query";
+import { dedupeMentions } from "../listen/dedupe";
 
 export function mergeConnectedSources(
   sources: Source[],
@@ -30,6 +32,90 @@ export function pageIdsFromAccounts(
   ];
 }
 
+export function ruleFromKeyword(keyword: Pick<Keyword, "phrase" | "matchType" | "language" | "country" | "requiredWords" | "excludedWords" | "booleanQuery" | "synonyms" | "autoVariants">): KeywordRule {
+  return ruleFromPhrase(keyword.phrase, {
+    matchType: keyword.matchType,
+    language: keyword.language,
+    country: keyword.country,
+    requiredWords: keyword.requiredWords,
+    excludedWords: keyword.excludedWords,
+    booleanQuery: keyword.booleanQuery,
+    synonyms: keyword.synonyms,
+    autoVariants: keyword.autoVariants,
+  });
+}
+
+export async function persistMentions(
+  projectId: string,
+  rows: { mention: RawMention; keywordId?: string }[],
+) {
+  const unique = dedupeMentions(rows.map((row) => row.mention));
+  const byKey = new Map(unique.map((mention) => [`${mention.source}:${mention.externalId}`, mention]));
+  let upserted = 0;
+  for (const row of rows) {
+    const mention = byKey.get(`${row.mention.source}:${row.mention.externalId}`);
+    if (!mention) continue;
+    byKey.delete(`${row.mention.source}:${row.mention.externalId}`);
+    const lang = detectLanguage(`${mention.title ?? ""} ${mention.content}`);
+    const sentiment = await analyzeSentiment(`${mention.title ?? ""} ${mention.content}`);
+    try {
+      await prisma.mention.upsert({
+        where: {
+          projectId_source_externalId: {
+            projectId,
+            source: mention.source,
+            externalId: String(mention.externalId).slice(0, 190),
+          },
+        },
+        create: {
+          projectId,
+          keywordId: row.keywordId,
+          source: mention.source,
+          externalId: String(mention.externalId).slice(0, 190),
+          url: mention.url || "https://example.invalid",
+          title: mention.title,
+          content: mention.content.slice(0, 8000),
+          authorName: mention.authorName,
+          authorHandle: mention.authorHandle,
+          authorUrl: mention.authorUrl,
+          publishedAt: mention.publishedAt,
+          language: lang.language,
+          direction: lang.direction,
+          reach: mention.reach ?? 0,
+          engagement: mention.engagement ?? 0,
+          likeCount: mention.likeCount ?? 0,
+          shareCount: mention.shareCount ?? 0,
+          viewCount: mention.viewCount ?? 0,
+          commentCount: mention.commentCount ?? 0,
+          followerCount: mention.followerCount ?? 0,
+          kind: mention.kind ?? "post",
+          parentExternalId: mention.parentExternalId,
+          sentiment: sentiment.sentiment,
+          sentimentScore: sentiment.sentimentScore,
+          topics: extractTopics([mention.content], 4).map((topic) => topic.topic),
+          raw: mention.raw as object | undefined,
+        },
+        update: {
+          content: mention.content.slice(0, 8000),
+          keywordId: row.keywordId,
+          reach: mention.reach ?? 0,
+          engagement: mention.engagement ?? 0,
+          likeCount: mention.likeCount ?? 0,
+          shareCount: mention.shareCount ?? 0,
+          viewCount: mention.viewCount ?? 0,
+          commentCount: mention.commentCount ?? 0,
+          sentiment: sentiment.sentiment,
+          sentimentScore: sentiment.sentimentScore,
+        },
+      });
+      upserted += 1;
+    } catch {
+      // unique races
+    }
+  }
+  return { collected: rows.length, upserted };
+}
+
 export async function ingestProject(projectId: string) {
   const project = await prisma.project.findUnique({
     where: { id: projectId },
@@ -43,7 +129,6 @@ export async function ingestProject(projectId: string) {
     liveAccounts,
   );
   config.instagramUserIds = pageIdsFromAccounts(config.instagramUserIds, liveAccounts, "INSTAGRAM");
-  const phrases = project.keywords.map((k) => k.phrase);
   if (project.entities.length) {
     config.competitors = [
       ...(config.competitors ?? []),
@@ -72,6 +157,15 @@ export async function ingestProject(projectId: string) {
   }
 
   const collected: { mention: RawMention; keywordId?: string }[] = [];
+  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const keywordRules = project.keywords.length
+    ? project.keywords.map((keyword) => ({
+        keyword,
+        rule: ruleFromKeyword(keyword),
+        queries: searchQueries(ruleFromKeyword(keyword)),
+      }))
+    : [{ keyword: undefined, rule: ruleFromPhrase(project.name), queries: searchQueries(ruleFromPhrase(project.name)) }];
+
   for (const source of sources) {
     const connector = getConnector(source);
     if (!connector) continue;
@@ -79,23 +173,38 @@ export async function ingestProject(projectId: string) {
     const passes = accounts.length ? accounts : [undefined];
     try {
       for (const account of passes) {
-        for (const phrase of phrases.length ? phrases : [project.name]) {
-          const keyword = project.keywords.find((k) => k.phrase === phrase);
-          const ctx = {
-            query: phrase,
-            projectId: project.id,
-            workspaceId: project.workspaceId,
-            projectConfig: config,
-            accessToken: account?.accessToken ?? undefined,
-            accountId: account?.id,
-            accountExternalId: account?.externalId ?? undefined,
-            limit: 20,
-          };
-          const found = await connector.search(ctx);
-          for (const mention of found) collected.push({ mention, keywordId: keyword?.id });
-          if (connector.trackAccounts) {
-            const tracked = await connector.trackAccounts(ctx);
-            for (const mention of tracked) collected.push({ mention, keywordId: keyword?.id });
+        for (const { keyword, rule, queries } of keywordRules) {
+          const paid = source === "WEB_SEARCH" || source === "QUORA";
+          const searchTerms = paid ? queries.slice(0, 1) : queries;
+          for (const query of searchTerms) {
+            const ctx = {
+              query,
+              language: rule.language ?? undefined,
+              country: rule.country ?? undefined,
+              since,
+              projectId: project.id,
+              workspaceId: project.workspaceId,
+              projectConfig: config,
+              accessToken: account?.accessToken ?? undefined,
+              accountId: account?.id,
+              accountExternalId: account?.externalId ?? undefined,
+              limit: 40,
+              purpose: "scheduled" as const,
+              keywordKey: keyword?.id ?? rule.phrase,
+            };
+            const found = await connector.search(ctx);
+            for (const mention of found) {
+              if (!mentionMatches(`${mention.title ?? ""} ${mention.content}`, rule)) continue;
+              if (mention.publishedAt && mention.publishedAt < since) continue;
+              collected.push({ mention, keywordId: keyword?.id });
+            }
+            if (connector.trackAccounts) {
+              const tracked = await connector.trackAccounts(ctx);
+              for (const mention of tracked) {
+                if (!mentionMatches(`${mention.title ?? ""} ${mention.content}`, rule)) continue;
+                collected.push({ mention, keywordId: keyword?.id });
+              }
+            }
           }
         }
       }
@@ -111,65 +220,7 @@ export async function ingestProject(projectId: string) {
     }
   }
 
-  let upserted = 0;
-  for (const row of collected) {
-    const lang = detectLanguage(`${row.mention.title ?? ""} ${row.mention.content}`);
-    const sentiment = await analyzeSentiment(`${row.mention.title ?? ""} ${row.mention.content}`);
-    try {
-      await prisma.mention.upsert({
-        where: {
-          projectId_source_externalId: {
-            projectId: project.id,
-            source: row.mention.source,
-            externalId: String(row.mention.externalId).slice(0, 190),
-          },
-        },
-        create: {
-          projectId: project.id,
-          keywordId: row.keywordId,
-          source: row.mention.source,
-          externalId: String(row.mention.externalId).slice(0, 190),
-          url: row.mention.url || "https://example.invalid",
-          title: row.mention.title,
-          content: row.mention.content.slice(0, 8000),
-          authorName: row.mention.authorName,
-          authorHandle: row.mention.authorHandle,
-          authorUrl: row.mention.authorUrl,
-          publishedAt: row.mention.publishedAt,
-          language: lang.language,
-          direction: lang.direction,
-          reach: row.mention.reach ?? 0,
-          engagement: row.mention.engagement ?? 0,
-          likeCount: row.mention.likeCount ?? 0,
-          shareCount: row.mention.shareCount ?? 0,
-          viewCount: row.mention.viewCount ?? 0,
-          commentCount: row.mention.commentCount ?? 0,
-          followerCount: row.mention.followerCount ?? 0,
-          kind: row.mention.kind ?? "post",
-          parentExternalId: row.mention.parentExternalId,
-          sentiment: sentiment.sentiment,
-          sentimentScore: sentiment.sentimentScore,
-          topics: extractTopics([row.mention.content], 4).map((t) => t.topic),
-          raw: row.mention.raw as object | undefined,
-        },
-        update: {
-          content: row.mention.content.slice(0, 8000),
-          reach: row.mention.reach ?? 0,
-          engagement: row.mention.engagement ?? 0,
-          likeCount: row.mention.likeCount ?? 0,
-          shareCount: row.mention.shareCount ?? 0,
-          viewCount: row.mention.viewCount ?? 0,
-          commentCount: row.mention.commentCount ?? 0,
-          sentiment: sentiment.sentiment,
-          sentimentScore: sentiment.sentimentScore,
-        },
-      });
-      upserted += 1;
-    } catch {
-      // unique races
-    }
-  }
-  return { collected: collected.length, upserted };
+  return persistMentions(project.id, collected);
 }
 
 export async function ingestAllActive() {

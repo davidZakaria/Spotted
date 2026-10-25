@@ -1,6 +1,7 @@
 import { requireSession } from "@/lib/auth";
 import { connectorStatus } from "@/lib/connectors/registry";
 import { usageSummary } from "@/lib/connectors/usage";
+import { serpUsageSummary } from "@/lib/listen/serpapi";
 import { instagramHashtagStatus } from "@/lib/connectors/quotas";
 import { prisma } from "@/lib/db";
 import { updateBudgetAction } from "@/lib/actions";
@@ -32,6 +33,7 @@ export default async function PlatformsPage({
   const { error, connected, pages } = await searchParams;
   const sources = connectorStatus();
   const xUsage = await usageSummary(session.workspaceId, "X");
+  const serp = await serpUsageSummary(session.workspaceId);
   const igAccount = await prisma.socialAccount.findFirst({
     where: { workspaceId: session.workspaceId, platform: "INSTAGRAM" },
   });
@@ -93,6 +95,21 @@ export default async function PlatformsPage({
             <Field label={locale === "ar" ? "حد $" : "Max $"}><input name="monthlySpendLimitUsd" type="number" step="0.01" defaultValue={xUsage.budget?.monthlySpendLimitUsd ?? 25} /></Field>
             <div className="col-span-3"><Button type="submit">{t(locale, "save")}</Button></div>
           </form>
+        </Card>
+        <Card>
+          <h2 className="font-semibold">{locale === "ar" ? "حد SerpAPI (بحث جوجل)" : "SerpAPI (Google web & News)"}</h2>
+          <p className="mt-1 text-sm text-muted">
+            {serp.hasKey
+              ? locale === "ar"
+                ? `تبقّى ${serp.remaining} من ${serp.limit} هذا الشهر. نستخدمه في «ابحث في كل مكان» ومرتين لكل كلمة يومياً.`
+                : `${serp.remaining} of ${serp.limit} searches left this month (SERPAPI_MONTHLY_LIMIT). Used for Search everywhere and two scheduled refreshes per watched word per day.`
+              : locale === "ar"
+                ? "أضف SERPAPI_API_KEY لتوسيع بحث الويب والأخبار."
+                : "Add SERPAPI_API_KEY to include Google web and Google News results."}
+          </p>
+          <div className="mt-3 h-2 overflow-hidden rounded-full bg-bg-soft">
+            <div className="h-full bg-accent" style={{ width: `${serp.limit ? (serp.used / serp.limit) * 100 : 0}%` }} />
+          </div>
         </Card>
         <Card>
           <h2 className="font-semibold">{locale === "ar" ? "حصة هاشتاج إنستغرام" : "Instagram hashtag allowance"}</h2>

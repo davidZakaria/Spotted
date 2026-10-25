@@ -28,7 +28,7 @@ export const youtubeConnector: Connector = {
         };
       }[];
     }>(
-      `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=${ctx.limit ?? 15}&q=${encodeURIComponent(ctx.query)}&key=${key()}`,
+      `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=${Math.min(ctx.limit ?? 15, 25)}&q=${encodeURIComponent(ctx.query)}&key=${key()}${ctx.since ? `&publishedAfter=${ctx.since.toISOString()}` : ""}`,
     );
     const ids = (data.items ?? []).map((i) => i.id?.videoId).filter(Boolean).join(",");
     let stats: Record<string, { viewCount?: string; likeCount?: string; commentCount?: string }> = {};

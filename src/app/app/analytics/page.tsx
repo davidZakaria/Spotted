@@ -6,6 +6,7 @@ import { fetchTrends } from "@/lib/trends";
 import { BrandSwitcher } from "@/components/brand-switcher";
 import { ChartBlock, EmptyState, PageHeader } from "@/components/ui";
 import { SentimentBars, SourcePie, VolumeChart } from "@/components/charts";
+import { TopicCloud } from "@/components/topic-cloud";
 import { t } from "@/lib/i18n";
 import { platformInfo } from "@/lib/platforms";
 
@@ -100,6 +101,12 @@ export default async function AnalyticsPage({
               ))}
             </ul>
           )}
+        </ChartBlock>
+        <ChartBlock
+          title={locale === "ar" ? "كلمات رائجة" : "Trending words"}
+          explanation={locale === "ar" ? "السحابة تكبّر الكلمة كلما تكررت." : "Bigger words showed up more often."}
+        >
+          <TopicCloud topics={stats.topics} empty={locale === "ar" ? "لا كلمات بعد." : "No topics yet."} />
         </ChartBlock>
         <ChartBlock
           title={locale === "ar" ? "حصة كل كلمة" : "Which watch words won"}

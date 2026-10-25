@@ -50,6 +50,7 @@ export type ProjectConfig = {
 export type ConnectorContext = {
   query: string;
   language?: string;
+  country?: string;
   since?: Date;
   limit?: number;
   projectId?: string;
@@ -58,6 +59,8 @@ export type ConnectorContext = {
   accessToken?: string;
   accountId?: string;
   accountExternalId?: string;
+  purpose?: "live" | "scheduled";
+  keywordKey?: string;
 };
 
 export type RawMention = {

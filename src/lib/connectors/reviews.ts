@@ -139,7 +139,20 @@ export const appStoreConnector: Connector = {
         })),
       );
     }
-    return out;
+    if (ids.length) return out;
+    const data = await getJson<{ results?: { trackId: number; trackName?: string; description?: string; artistName?: string; trackViewUrl?: string; releaseDate?: string }[] }>(
+      `https://itunes.apple.com/search?term=${encodeURIComponent(ctx.query)}&entity=software&limit=15`,
+    );
+    return (data.results ?? []).map((app) => ({
+      source: "APP_STORE" as const,
+      externalId: String(app.trackId),
+      url: app.trackViewUrl ?? `https://apps.apple.com/app/id${app.trackId}`,
+      title: app.trackName,
+      content: app.description ?? app.trackName ?? "",
+      authorName: app.artistName,
+      publishedAt: app.releaseDate ? new Date(app.releaseDate) : new Date(),
+      kind: "app",
+    }));
   },
 };
 

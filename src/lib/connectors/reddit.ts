@@ -125,8 +125,16 @@ export const redditConnector: Connector = {
   isConfigured: () => true,
   async search(ctx) {
     const q = encodeURIComponent(ctx.query);
-    const data = await redditGet(`/search.json?q=${q}&sort=new&limit=${ctx.limit ?? 25}&t=week`);
-    return (data.data?.children ?? []).map((c) => mapChild(c, "post"));
+    const window = ctx.since && Date.now() - ctx.since.getTime() > 8 * 86400000 ? "month" : "week";
+    const out: RawMention[] = [];
+    let after = "";
+    for (let page = 0; page < 2; page += 1) {
+      const data = await redditGet(`/search.json?q=${q}&sort=new&limit=${ctx.limit ?? 25}&t=${window}${after ? `&after=${after}` : ""}`);
+      out.push(...(data.data?.children ?? []).map((c) => mapChild(c, "post")));
+      after = (data.data as { after?: string } | undefined)?.after ?? "";
+      if (!after) break;
+    }
+    return out;
   },
   async trackAccounts(ctx) {
     const subs = ctx.projectConfig?.redditSubreddits ?? [];

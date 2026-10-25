@@ -62,7 +62,7 @@ export function startWorker() {
 
 export async function scheduleRepeats() {
   const q = getQueue();
-  await q.add("ingest-all", {}, { repeat: { every: 15 * 60 * 1000 }, jobId: "repeat-ingest" });
+  await q.add("ingest-all", {}, { repeat: { every: 5 * 60 * 1000 }, jobId: "repeat-ingest" });
   await q.add("evaluate-alerts", {}, { repeat: { every: 5 * 60 * 1000 }, jobId: "repeat-alerts" });
   await q.add("publish-due", {}, { repeat: { every: 60 * 1000 }, jobId: "repeat-publish" });
   await q.add("send-digests", {}, { repeat: { every: 24 * 60 * 60 * 1000 }, jobId: "repeat-digest" });
