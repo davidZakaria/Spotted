@@ -10,12 +10,12 @@ export const META_SCOPES = [
   "pages_messaging",
   "pages_manage_metadata",
   "business_management",
-  "instagram_basic",
-  "instagram_manage_comments",
-  "instagram_manage_insights",
-  "instagram_content_publish",
-  "instagram_manage_messages",
 ];
+
+// Instagram permissions only work once the Instagram use case grants them in the Meta app.
+// Set META_EXTRA_SCOPES="instagram_basic,instagram_manage_comments,..." to request them.
+const EXTRA_SCOPES = (process.env.META_EXTRA_SCOPES || "").split(",").map((x) => x.trim()).filter(Boolean);
+
 
 export type ManagedPage = {
   id: string;
@@ -34,7 +34,7 @@ export function metaAuthorizeUrl(state: string, appId = env("META_APP_ID")) {
   const usp = new URLSearchParams({
     client_id: appId,
     redirect_uri: redirectUri,
-    scope: META_SCOPES.join(","),
+    scope: [...META_SCOPES, ...EXTRA_SCOPES].join(","),
     state,
     response_type: "code",
   });
