@@ -58,21 +58,24 @@ export function arabicTerms(rule: Pick<KeywordRule, "phrase" | "synonyms">) {
 }
 
 export function searchQueries(rule: KeywordRule, max = 8): string[] {
-  const out = new Set<string>();
+  const out: string[] = [];
+  const seen = new Set<string>();
   const add = (value?: string | null) => {
     const trimmed = value?.trim();
-    if (trimmed) out.add(trimmed);
+    if (!trimmed || seen.has(trimmed)) return;
+    seen.add(trimmed);
+    out.push(trimmed);
   };
   if (rule.booleanQuery?.trim()) add(rule.booleanQuery);
   const bases = [rule.phrase, ...(rule.synonyms ?? [])];
-  for (const base of bases) {
-    if (rule.autoVariants === false) add(base);
-    else expandVariants(base).forEach(add);
+  for (const base of bases) add(base);
+  if (rule.autoVariants !== false) {
+    for (const base of bases) expandVariants(base).forEach(add);
   }
   if (rule.requiredWords?.length) {
     add(`${rule.phrase} ${rule.requiredWords.join(" ")}`);
   }
-  return [...out].slice(0, max);
+  return out.slice(0, max);
 }
 
 type Token =

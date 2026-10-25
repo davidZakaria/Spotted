@@ -64,6 +64,8 @@ export type ConnectorContext = {
   keywordKey?: string;
   extraQueries?: string[];
   preferEgyptNews?: boolean;
+  serpQuery?: string;
+  skipSerp?: boolean;
 };
 
 export type RawMention = {

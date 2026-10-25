@@ -99,7 +99,7 @@ Every source implements the same interface: keyword/hashtag/mention listening, p
 
 Google Custom Search JSON API is **closed to new customers** and **shuts down 1 January 2027**. Spotted does not use it.
 
-Set `SERPAPI_API_KEY` to search Google web and Google News (engines `google` and `google_news`). The free plan is 250 searches/month — set `SERPAPI_MONTHLY_LIMIT` (default 250). Spotted uses SerpAPI for **Search everywhere** and at most two scheduled refreshes per watched word per day, then falls back to RSS news and other keyless sources. Reddit and Quora share one budgeted Google query — `(site:reddit.com OR site:quora.com) <keyword>` — when both use SerpAPI; results are split by domain. Optional `BRAVE_SEARCH_API_KEY` is preferred for Quora (and extra web results) so those hits do not spend SerpAPI.
+Set `SERPAPI_API_KEY` to search Google web and Google News (engines `google` and `google_news`). The free plan is 250 searches/month — set `SERPAPI_MONTHLY_LIMIT` (default 250). Spotted uses SerpAPI for **Search everywhere** and at most two scheduled refreshes per watched word per day, then falls back to RSS news and other keyless sources. Each watched word still spends **one SerpAPI query**: distinct high-signal synonyms are ORed until Google’s ~32-word limit, and leftovers rotate on later scheduled runs. Free sources (Google News RSS ar/en, Bluesky, Mastodon, Hacker News) may split the synonym list into several queries. Reddit and Quora share one budgeted Google query — `(site:reddit.com OR site:quora.com) (<keyword> OR …)` — when both use SerpAPI; results are split by domain. Optional `BRAVE_SEARCH_API_KEY` is preferred for Quora (and extra web results) so those hits do not spend SerpAPI.
 
 ### X usage budgets
 

@@ -34,6 +34,11 @@ describe("sentiment", () => {
     expect(analyzeSentimentLocal("غير محترم وحفرة في المشروع").sentiment).toBe("NEGATIVE");
     expect(isComplaintRisk("fraud lawsuit scam استغاثة")).toBe(true);
     expect(isComplaintRisk("تحقيق جديد في الساحل الشمالي")).toBe(false);
+    expect(analyzeSentimentLocal("نصابين وحرامية وبلطجة على ضحايا").complaint).toBe(true);
+    expect(analyzeSentimentLocal("بلاغ في حماية المستهلك ومحضر في الرقابة الإدارية").complaint).toBe(true);
+    expect(analyzeSentimentLocal("فاشلة ووحشة وزفت وهبل ومتأخرة").sentiment).toBe("NEGATIVE");
+    expect(analyzeSentimentLocal("مبتسلمش فلوسنا ونطالب باسترداد").complaint).toBe(true);
+    expect(isComplaintRisk("These scammers ran a fraud")).toBe(true);
   });
 
   it("is negation-aware for simple English and Arabic", () => {

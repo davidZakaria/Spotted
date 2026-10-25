@@ -150,6 +150,8 @@ describe("Quora live plan and cards", () => {
     expect(searchQueryCap("REDDIT", { SERPAPI_API_KEY: "k" })).toBe(1);
     expect(searchQueryCap("REDDIT", { REDDIT_CLIENT_ID: "id", REDDIT_CLIENT_SECRET: "secret" })).toBe(6);
     expect(searchQueryCap("WEB_SEARCH")).toBe(1);
+    expect(searchQueryCap("GOOGLE_NEWS")).toBeGreaterThanOrEqual(40);
+    expect(searchQueryCap("BLUESKY")).toBeGreaterThanOrEqual(40);
   });
 
   it("ships Found through Google search on the Quora card and prefers Brave in the connector", () => {

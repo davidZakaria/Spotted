@@ -11,6 +11,7 @@ import { serpUsageSummary } from "./serpapi";
 import { searchQueryCap } from "./forum-serp";
 import { isValidDate, parsePublishedAt, safeIso } from "./dates";
 import { tokenOf } from "@/lib/crypto";
+import { selectSerpSynonyms, sourceUsesPackedSerpQuery } from "./synonyms";
 
 export type LiveHit = {
   source: Source;
@@ -52,9 +53,12 @@ export async function searchOneSource(input: {
   const connector = getConnector(input.source);
   if (!connector) return [];
   const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-  const queries = searchQueries(input.rule, searchQueryCap(input.source));
+  const serpQuery = selectSerpSynonyms(input.rule, { rotateLeftovers: false }).query;
+  const queries = sourceUsesPackedSerpQuery(input.source)
+    ? [serpQuery]
+    : searchQueries(input.rule, searchQueryCap(input.source));
   const out: RawMention[] = [];
-  for (const query of queries) {
+  for (const [index, query] of queries.entries()) {
     const found = await connector.search({
       query,
       language: input.rule.language ?? undefined,
@@ -69,6 +73,8 @@ export async function searchOneSource(input: {
       accountExternalId: input.accountExternalId,
       purpose: "live",
       keywordKey: input.rule.phrase,
+      serpQuery,
+      skipSerp: index > 0,
     });
     out.push(...found);
   }

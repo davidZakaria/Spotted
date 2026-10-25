@@ -12,7 +12,6 @@ import { dedupeMentions } from "../listen/dedupe";
 import {
   BACKFILL_DAYS,
   BACKFILL_SOURCES,
-  arabicTerms,
   backfillSerpQuery,
   INGEST_DAYS,
   lookbackSince,
@@ -20,6 +19,12 @@ import {
   wantsArabicCoverage,
 } from "../listen/backfill";
 import { hasSerpApi, runSerpSearch } from "../listen/serpapi";
+import {
+  FREE_SPLIT_QUERY_CAP,
+  selectSerpSynonyms,
+  sourceUsesPackedSerpQuery,
+  synonymRotationSlot,
+} from "../listen/synonyms";
 
 export function mergeConnectedSources(
   sources: Source[],
@@ -139,6 +144,7 @@ type KeywordRow = {
   keyword?: Keyword;
   rule: KeywordRule;
   queries: string[];
+  serpQuery: string;
 };
 
 async function collectFromSources(input: {
@@ -163,8 +169,10 @@ async function collectFromSources(input: {
     const passes = accounts.length ? accounts : [undefined];
     try {
       for (const account of passes) {
-        for (const { keyword, rule, queries } of input.rows) {
-          const searchTerms = queries.slice(0, searchQueryCap(source));
+        for (const { keyword, rule, queries, serpQuery } of input.rows) {
+          const searchTerms = sourceUsesPackedSerpQuery(source)
+            ? [serpQuery]
+            : queries.slice(0, searchQueryCap(source));
           for (const [index, query] of searchTerms.entries()) {
             const ctx = {
               query,
@@ -182,6 +190,8 @@ async function collectFromSources(input: {
               keywordKey: keyword?.id ?? rule.phrase,
               preferEgyptNews: input.preferEgyptNews,
               extraQueries: source === "GOOGLE_NEWS" && index === 0 ? input.extraQueries : undefined,
+              serpQuery,
+              skipSerp: index > 0,
             };
             const found = await connector.search(ctx);
             for (const mention of found) {
@@ -229,6 +239,7 @@ async function collectBackfillSerp(input: {
   const planned = backfillSerpQuery(input.row.rule, {
     languages: input.languages,
     timezone: input.timezone,
+    rotateLeftovers: false,
   });
   const serp = await runSerpSearch({
     query: planned.query,
@@ -303,12 +314,30 @@ export async function ingestProject(
   const regularSince = lookbackSince(INGEST_DAYS);
   const backfillSince = lookbackSince(BACKFILL_DAYS);
   const keywordRules: KeywordRow[] = project.keywords.length
-    ? project.keywords.map((keyword) => ({
-        keyword,
-        rule: ruleFromKeyword(keyword),
-        queries: searchQueries(ruleFromKeyword(keyword)),
-      }))
-    : [{ keyword: undefined, rule: ruleFromPhrase(project.name), queries: searchQueries(ruleFromPhrase(project.name)) }];
+    ? project.keywords.map((keyword) => {
+        const rule = ruleFromKeyword(keyword);
+        return {
+          keyword,
+          rule,
+          queries: searchQueries(rule, FREE_SPLIT_QUERY_CAP),
+          serpQuery: selectSerpSynonyms(rule, {
+            rotation: synonymRotationSlot(keyword.id),
+            rotateLeftovers: true,
+            preferArabic: wantsArabicCoverage(rule, {
+              languages: config.languages,
+              timezone: project.workspace.timezone,
+            }),
+          }).query,
+        };
+      })
+    : [
+        {
+          keyword: undefined,
+          rule: ruleFromPhrase(project.name),
+          queries: searchQueries(ruleFromPhrase(project.name), FREE_SPLIT_QUERY_CAP),
+          serpQuery: selectSerpSynonyms(ruleFromPhrase(project.name)).query,
+        },
+      ];
   const targeted = opts.keywordId
     ? keywordRules.filter((row) => row.keyword?.id === opts.keywordId)
     : keywordRules;
@@ -339,7 +368,6 @@ export async function ingestProject(
           history: true,
           includeTrackAccounts: false,
           preferEgyptNews: arabic,
-          extraQueries: arabic ? arabicTerms(row.rule) : [],
         })),
         ...(await collectBackfillSerp({
           projectId: project.id,

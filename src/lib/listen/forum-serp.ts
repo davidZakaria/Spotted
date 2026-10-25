@@ -2,6 +2,7 @@ import type { Source } from "@prisma/client";
 import { hasRedditApp } from "@/lib/platform-status";
 import { hasSerpApi, runSerpSearch } from "@/lib/listen/serpapi";
 import type { ConnectorContext, RawMention } from "@/lib/connectors/types";
+import { FREE_SPLIT_QUERY_CAP, FREE_SPLIT_SOURCES } from "@/lib/listen/synonyms";
 
 export type ForumSite = "reddit.com" | "quora.com";
 
@@ -29,6 +30,7 @@ export function hasBraveSearch(e: Record<string, string | undefined> = process.e
 export function searchQueryCap(source: Source, e: Record<string, string | undefined> = process.env) {
   if (source === "WEB_SEARCH" || source === "QUORA") return 1;
   if (source === "REDDIT" && !hasRedditApp(e)) return 1;
+  if (FREE_SPLIT_SOURCES.includes(source)) return FREE_SPLIT_QUERY_CAP;
   if (source === "YOUTUBE") return 2;
   return 6;
 }
@@ -49,7 +51,8 @@ export function forumSerpQuery(keyword: string, sites: ForumSite[]) {
   const q = keyword.trim();
   if (!q) return clause;
   if (/\bsite:(?:reddit|quora)\.com\b/i.test(q)) return q;
-  return `${clause} ${q}`;
+  const grouped = /\bOR\b/.test(q) && !/^\(.*\)$/.test(q) ? `(${q})` : q;
+  return `${clause} ${grouped}`;
 }
 
 export function hostOf(url: string) {

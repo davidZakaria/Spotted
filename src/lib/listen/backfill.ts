@@ -1,6 +1,7 @@
 import type { Source } from "@prisma/client";
 import type { RawMention } from "@/lib/connectors/types";
 import { arabicTerms, type KeywordRule } from "@/lib/listen/query";
+import { selectSerpSynonyms, serpTerm } from "@/lib/listen/synonyms";
 
 export { arabicTerms };
 
@@ -47,25 +48,31 @@ export function wantsArabicCoverage(
   return targetsEgypt({ country: rule.country, languages: extras.languages, timezone: extras.timezone });
 }
 
-function serpTerm(term: string) {
-  const cleaned = term.trim().replace(/"/g, "");
-  return /[\s]/.test(cleaned) ? `"${cleaned}"` : cleaned;
-}
-
 export function backfillSerpQuery(
   rule: Pick<KeywordRule, "phrase" | "synonyms" | "language" | "country">,
-  extras: { languages?: string[]; timezone?: string | null } = {},
+  extras: {
+    languages?: string[];
+    timezone?: string | null;
+    rotation?: number;
+    rotateLeftovers?: boolean;
+  } = {},
 ) {
-  const arabic = arabicTerms(rule);
   const egypt = wantsArabicCoverage(rule, extras);
-  const terms = [rule.phrase, ...arabic].map((term) => term.trim()).filter(Boolean);
-  const unique = [...new Set(terms)];
+  const packed = selectSerpSynonyms(rule, {
+    rotation: extras.rotation ?? 0,
+    rotateLeftovers: extras.rotateLeftovers ?? false,
+    preferArabic: egypt,
+  });
   return {
-    query: unique.map(serpTerm).join(" OR "),
+    query: packed.query,
+    selected: packed.selected,
+    remaining: packed.remaining,
     language: egypt ? "ar" : rule.language ?? undefined,
     country: egypt ? "eg" : rule.country ?? undefined,
   };
 }
+
+export { serpTerm };
 
 export function markHistoryScan(mention: RawMention): RawMention {
   return {

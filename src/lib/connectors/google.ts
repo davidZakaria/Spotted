@@ -1,4 +1,5 @@
 import { env } from "../config";
+import { isArabicText } from "../listen/query";
 import { getJson } from "./http";
 import { parseFeeds } from "./rss";
 import type { Connector, InboxPayload, RawMention } from "./types";
@@ -44,27 +45,32 @@ export const googleNewsConnector: Connector = {
   capabilities: [],
   isConfigured: () => true,
   async search(ctx) {
+    const arabicQuery = isArabicText(ctx.query);
     const editions = newsEditionsFor(
-      ctx.language,
-      ctx.country ?? ctx.projectConfig?.languages?.[0],
-      ctx.preferEgyptNews,
-    );
+      arabicQuery ? "ar" : ctx.language,
+      arabicQuery ? "EG" : ctx.country ?? ctx.projectConfig?.languages?.[0],
+      ctx.preferEgyptNews || arabicQuery,
+    ).slice(0, arabicQuery ? 2 : 4);
     const urls = editions.map(
       (edition) =>
         `https://news.google.com/rss/search?q=${encodeURIComponent(ctx.query)}&hl=${edition.hl}&gl=${edition.gl}&ceid=${edition.ceid}`,
     );
+    if (ctx.preferEgyptNews && arabicQuery && !urls.some((url) => url.includes("ceid=EG:ar"))) {
+      urls.unshift(egyptNewsRssUrl(ctx.query));
+    }
     if (ctx.preferEgyptNews) {
       const extras = ctx.extraQueries?.length ? ctx.extraQueries : [];
       for (const query of extras) {
+        if (query === ctx.query) continue;
         urls.push(egyptNewsRssUrl(query));
       }
     }
     const rss = await parseFeeds("GOOGLE_NEWS", urls, undefined, ctx.purpose === "backfill" ? 80 : 30);
     try {
       const { hasSerpApi, runSerpSearch } = await import("../listen/serpapi");
-      if (!hasSerpApi() || ctx.purpose === "backfill") return rss;
+      if (!hasSerpApi() || ctx.purpose === "backfill" || ctx.skipSerp) return rss;
       const serp = await runSerpSearch({
-        query: ctx.query,
+        query: ctx.serpQuery || ctx.query,
         engine: "google_news",
         purpose: ctx.purpose ?? "scheduled",
         workspaceId: ctx.workspaceId,
