@@ -62,6 +62,8 @@ export type ConnectorContext = {
   accountExternalId?: string;
   purpose?: "live" | "scheduled" | "backfill";
   keywordKey?: string;
+  extraQueries?: string[];
+  preferEgyptNews?: boolean;
 };
 
 export type RawMention = {

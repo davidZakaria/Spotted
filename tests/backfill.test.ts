@@ -1,13 +1,18 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { newsEditionsFor } from "@/lib/connectors/google";
+import { ruleFromPhrase } from "@/lib/listen/query";
 import {
   BACKFILL_DAYS,
   BACKFILL_SOURCES,
+  backfillSerpQuery,
+  egyptNewsRssUrl,
   HISTORY_SCAN_KIND,
   HISTORY_SCAN_LABEL,
   INGEST_DAYS,
   lookbackSince,
   markHistoryScan,
+  wantsArabicCoverage,
 } from "@/lib/listen/backfill";
 
 describe("historical backfill", () => {
@@ -49,6 +54,25 @@ describe("historical backfill", () => {
     const google = readFileSync("src/lib/connectors/google.ts", "utf8");
     expect(google).toMatch(/purpose === "backfill"/);
     expect(google).not.toMatch(/when:7d/);
+    expect(google).toMatch(/egyptNewsRssUrl|ceid=EG:ar|EGYPT_AR_EDITION/);
+  });
+
+  it("adds Arabic synonyms to one Egypt SerpAPI query and Egypt News RSS", () => {
+    const rule = ruleFromPhrase("J-Communities", { synonyms: ["مجتمعات ج", "اعلانات"] });
+    expect(wantsArabicCoverage(rule)).toBe(true);
+    expect(wantsArabicCoverage(ruleFromPhrase("Acme"), { timezone: "Africa/Cairo" })).toBe(true);
+    const planned = backfillSerpQuery(rule);
+    expect(planned.query).toContain("OR");
+    expect(planned.query).toContain("مجتمعات ج");
+    expect(planned.country).toBe("eg");
+    expect(planned.language).toBe("ar");
+    expect(egyptNewsRssUrl("مجتمعات ج")).toBe(
+      "https://news.google.com/rss/search?q=%D9%85%D8%AC%D8%AA%D9%85%D8%B9%D8%A7%D8%AA%20%D8%AC&hl=ar&gl=EG&ceid=EG:ar",
+    );
+    expect(newsEditionsFor("en", undefined, true).some((edition) => edition.gl === "EG" && edition.hl === "ar")).toBe(true);
+    const mentions = readFileSync("src/app/app/mentions/page.tsx", "utf8");
+    expect(mentions).toMatch(/Arabic/);
+    expect(mentions).toMatch(/value="ar"/);
   });
 
   it("offers Search past year and shows Found in history scan", () => {

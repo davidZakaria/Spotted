@@ -11,7 +11,9 @@ export const NEWS_EDITIONS = [
   { hl: "ar", gl: "AE", ceid: "AE:ar" },
 ] as const;
 
-export function newsEditionsFor(language?: string, country?: string) {
+export const EGYPT_AR_EDITION = { hl: "ar", gl: "EG", ceid: "EG:ar" } as const;
+
+export function newsEditionsFor(language?: string, country?: string, includeEgypt = false) {
   const lang = language?.toLowerCase();
   const region = country?.toUpperCase();
   let editions = NEWS_EDITIONS.filter((edition) => {
@@ -21,7 +23,16 @@ export function newsEditionsFor(language?: string, country?: string) {
     return true;
   });
   if (!editions.length) editions = [...NEWS_EDITIONS];
+  if (includeEgypt || region === "EG" || lang === "ar") {
+    if (!editions.some((edition) => edition.hl === "ar" && edition.gl === "EG")) {
+      editions = [EGYPT_AR_EDITION, ...editions];
+    }
+  }
   return editions.slice(0, 4);
+}
+
+export function egyptNewsRssUrl(query: string) {
+  return `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=${EGYPT_AR_EDITION.hl}&gl=${EGYPT_AR_EDITION.gl}&ceid=${EGYPT_AR_EDITION.ceid}`;
 }
 
 export const googleNewsConnector: Connector = {
@@ -33,11 +44,21 @@ export const googleNewsConnector: Connector = {
   capabilities: [],
   isConfigured: () => true,
   async search(ctx) {
-    const editions = newsEditionsFor(ctx.language, ctx.country ?? ctx.projectConfig?.languages?.[0]);
+    const editions = newsEditionsFor(
+      ctx.language,
+      ctx.country ?? ctx.projectConfig?.languages?.[0],
+      ctx.preferEgyptNews,
+    );
     const urls = editions.map(
       (edition) =>
         `https://news.google.com/rss/search?q=${encodeURIComponent(ctx.query)}&hl=${edition.hl}&gl=${edition.gl}&ceid=${edition.ceid}`,
     );
+    if (ctx.preferEgyptNews) {
+      const extras = ctx.extraQueries?.length ? ctx.extraQueries : [];
+      for (const query of extras) {
+        urls.push(egyptNewsRssUrl(query));
+      }
+    }
     const rss = await parseFeeds("GOOGLE_NEWS", urls, undefined, ctx.purpose === "backfill" ? 80 : 30);
     try {
       const { hasSerpApi, runSerpSearch } = await import("../listen/serpapi");

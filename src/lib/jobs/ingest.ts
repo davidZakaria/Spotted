@@ -12,9 +12,12 @@ import { dedupeMentions } from "../listen/dedupe";
 import {
   BACKFILL_DAYS,
   BACKFILL_SOURCES,
+  arabicTerms,
+  backfillSerpQuery,
   INGEST_DAYS,
   lookbackSince,
   markHistoryScan,
+  wantsArabicCoverage,
 } from "../listen/backfill";
 import { hasSerpApi, runSerpSearch } from "../listen/serpapi";
 
@@ -118,6 +121,7 @@ export async function persistMentions(
           commentCount: mention.commentCount ?? 0,
           sentiment: sentiment.sentiment,
           sentimentScore: sentiment.sentimentScore,
+          language: lang.language,
         },
       });
       upserted += 1;
@@ -145,6 +149,8 @@ async function collectFromSources(input: {
   purpose: "scheduled" | "backfill";
   history?: boolean;
   includeTrackAccounts?: boolean;
+  preferEgyptNews?: boolean;
+  extraQueries?: string[];
 }) {
   const collected: { mention: RawMention; keywordId?: string }[] = [];
   for (const source of input.sources) {
@@ -156,7 +162,7 @@ async function collectFromSources(input: {
       for (const account of passes) {
         for (const { keyword, rule, queries } of input.rows) {
           const searchTerms = queries.slice(0, searchQueryCap(source));
-          for (const query of searchTerms) {
+          for (const [index, query] of searchTerms.entries()) {
             const ctx = {
               query,
               language: rule.language ?? undefined,
@@ -171,6 +177,8 @@ async function collectFromSources(input: {
               limit: input.purpose === "backfill" ? 50 : 40,
               purpose: input.purpose,
               keywordKey: keyword?.id ?? rule.phrase,
+              preferEgyptNews: input.preferEgyptNews,
+              extraQueries: source === "GOOGLE_NEWS" && index === 0 ? input.extraQueries : undefined,
             };
             const found = await connector.search(ctx);
             for (const mention of found) {
@@ -211,17 +219,23 @@ async function collectBackfillSerp(input: {
   workspaceId: string;
   row: KeywordRow;
   since: Date;
+  languages?: string[];
+  timezone?: string | null;
 }) {
   if (!hasSerpApi()) return [] as { mention: RawMention; keywordId?: string }[];
+  const planned = backfillSerpQuery(input.row.rule, {
+    languages: input.languages,
+    timezone: input.timezone,
+  });
   const serp = await runSerpSearch({
-    query: input.row.rule.phrase,
+    query: planned.query,
     engine: "google",
     purpose: "backfill",
     workspaceId: input.workspaceId,
     projectId: input.projectId,
     keywordKey: input.row.keyword?.id ?? input.row.rule.phrase,
-    language: input.row.rule.language ?? undefined,
-    country: input.row.rule.country ?? undefined,
+    language: planned.language,
+    country: planned.country,
     source: "WEB_SEARCH",
     limit: 100,
   });
@@ -308,6 +322,10 @@ export async function ingestProject(
         (row.keyword ? !row.keyword.backfilledAt : !config.backfilledAt),
     );
     if (needsBackfill) {
+      const arabic = wantsArabicCoverage(row.rule, {
+        languages: config.languages,
+        timezone: project.workspace.timezone,
+      });
       collected.push(
         ...(await collectFromSources({
           ...shared,
@@ -317,12 +335,16 @@ export async function ingestProject(
           purpose: "backfill",
           history: true,
           includeTrackAccounts: false,
+          preferEgyptNews: arabic,
+          extraQueries: arabic ? arabicTerms(row.rule) : [],
         })),
         ...(await collectBackfillSerp({
           projectId: project.id,
           workspaceId: project.workspaceId,
           row,
           since: backfillSince,
+          languages: config.languages,
+          timezone: project.workspace.timezone,
         })),
       );
       if (row.keyword) {

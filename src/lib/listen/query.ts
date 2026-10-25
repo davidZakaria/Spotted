@@ -16,13 +16,20 @@ const ARABIC_AND = /^(و|and)$/i;
 const ARABIC_OR = /^(أو|او|or)$/i;
 const ARABIC_NOT = /^(ليس|not)$/i;
 
+const ARABIC_MARKS = /[\u0610-\u061A\u0640\u064B-\u065F\u0670\u06D6-\u06ED]/g;
+const ARABIC_LETTER = /[\u0621-\u063A\u0641-\u064A]/;
+
+export function isArabicText(value: string) {
+  return ARABIC_LETTER.test(value);
+}
+
 export function normalizeText(input: string) {
   return input
     .toLowerCase()
-    .replace(/[أإآ]/g, "ا")
+    .replace(ARABIC_MARKS, "")
+    .replace(/[أإآٱ]/g, "ا")
     .replace(/ى/g, "ي")
     .replace(/ة/g, "ه")
-    .replace(/[ـًٌٍَُِّْ]/g, "")
     .replace(/[-–—_]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -41,8 +48,13 @@ export function expandVariants(term: string): string[] {
   add(raw.replace(/\s+/g, "-"));
   add(raw.replace(/[-–—_\s]+/g, ""));
   add(raw.replace(/[-–—_\s]+/g, " "));
-  add(raw.replace(/[أإآ]/g, "ا").replace(/ى/g, "ي").replace(/ة/g, "ه"));
+  add(normalizeText(raw));
+  add(raw.replace(/[أإآٱ]/g, "ا").replace(/ى/g, "ي").replace(/ة/g, "ه"));
   return [...set];
+}
+
+export function arabicTerms(rule: Pick<KeywordRule, "phrase" | "synonyms">) {
+  return [...new Set([rule.phrase, ...(rule.synonyms ?? [])].map((term) => term.trim()).filter((term) => term && isArabicText(term)))];
 }
 
 export function searchQueries(rule: KeywordRule, max = 8): string[] {

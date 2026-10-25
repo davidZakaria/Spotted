@@ -201,7 +201,7 @@ export default async function MentionsPage({
         <select name="language" defaultValue={sp.language ?? ""}>
           <option value="">{locale === "ar" ? "كل اللغات" : "All languages"}</option>
           <option value="en">English</option>
-          <option value="ar">العربية</option>
+          <option value="ar">{locale === "ar" ? "العربية" : "Arabic"}</option>
           {languages.filter((language) => language !== "en" && language !== "ar").map((language) => (
             <option key={language} value={language}>{language}</option>
           ))}

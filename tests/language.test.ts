@@ -7,6 +7,8 @@ describe("language detection", () => {
     expect(d.language).toBe("ar");
     expect(d.direction).toBe("rtl");
     expect(isRtlLanguage("ar")).toBe(true);
+    expect(detectLanguage("إعلان عن J-Communities في القاهرة").language).toBe("ar");
+    expect(detectLanguage("هَذَا مُنْتَجٌ جَيِّد").language).toBe("ar");
   });
 
   it("detects English as LTR", () => {

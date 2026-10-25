@@ -6,6 +6,8 @@ export type DetectedLanguage = {
 
 const RTL_LANGS = new Set(["ar", "he", "fa", "ur", "ps", "sd", "yi"]);
 
+const ARABIC_LETTER = /[\u0621-\u063A\u0641-\u064A]/g;
+
 const RANGES: { script: string; language: string; re: RegExp }[] = [
   { script: "arabic", language: "ar", re: /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/ },
   { script: "hebrew", language: "he", re: /[\u0590-\u05FF]/ },
@@ -21,7 +23,12 @@ const RANGES: { script: string; language: string; re: RegExp }[] = [
 
 export function detectLanguage(text: string): DetectedLanguage {
   const sample = text.slice(0, 2000);
+  const arabicLetters = sample.match(ARABIC_LETTER) ?? [];
+  if (arabicLetters.length >= 2) {
+    return { language: "ar", direction: "rtl", script: "arabic" };
+  }
   for (const range of RANGES) {
+    if (range.language === "ar") continue;
     const hits = sample.match(new RegExp(range.re, "g"));
     if (hits && hits.length >= 3) {
       return {
@@ -31,7 +38,7 @@ export function detectLanguage(text: string): DetectedLanguage {
       };
     }
   }
-  if (RANGES[0].re.test(sample)) {
+  if (arabicLetters.length) {
     return { language: "ar", direction: "rtl", script: "arabic" };
   }
   return { language: "en", direction: "ltr", script: "latin" };

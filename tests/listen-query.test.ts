@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { expandVariants, mentionMatches, ruleFromPhrase, searchQueries } from "@/lib/listen/query";
+import { expandVariants, mentionMatches, normalizeText, ruleFromPhrase, searchQueries } from "@/lib/listen/query";
 import { dedupeMentions, influenceScore, normalizeUrl } from "@/lib/listen/dedupe";
 import { liveSourcePlan } from "@/lib/listen/sources";
 import { SERPAPI_SCHEDULED_PER_KEYWORD, serpMonthlyLimit } from "@/lib/listen/serpapi";
@@ -7,6 +7,14 @@ import { newsEditionsFor } from "@/lib/connectors/google";
 import { DEFAULT_RSS_FEEDS } from "@/lib/connectors/rss";
 
 describe("keyword variants and boolean", () => {
+  it("normalizes Arabic alef, taa marbuta, alef maqsura, tashkeel, and tatweel", () => {
+    expect(normalizeText("إعلانات")).toBe(normalizeText("اعلانات"));
+    expect(normalizeText("أُسْبُوع")).toBe(normalizeText("اسبوع"));
+    expect(normalizeText("قرية")).toBe(normalizeText("قريه"));
+    expect(normalizeText("على")).toBe(normalizeText("علي"));
+    expect(normalizeText("إعـلان")).toBe(normalizeText("اعلان"));
+  });
+
   it("treats real-estate and real estate as the same watch word", () => {
     const variants = expandVariants("real-estate");
     expect(variants).toContain("real-estate");
@@ -45,6 +53,8 @@ describe("keyword variants and boolean", () => {
     const arabic = ruleFromPhrase("إعلانات", { synonyms: ["اعلانات", "مجتمعات-ج"] });
     expect(mentionMatches("حملة اعلانات جديدة", arabic)).toBe(true);
     expect(mentionMatches("حديث عن مجتمعات ج اليوم", arabic)).toBe(true);
+    expect(mentionMatches("حملة إِعْلَانَات جديدة", ruleFromPhrase("اعلانات"))).toBe(true);
+    expect(mentionMatches("إعلانـات اليوم", ruleFromPhrase("اعلانات"))).toBe(true);
   });
 
   it("understands Arabic operators and letter variants", () => {
