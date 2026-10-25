@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { isSealedSecret, openSecret, redactSecrets, sealSecret } from "@/lib/crypto";
 import { csrfAllowed } from "@/lib/csrf";
-import { signupModeFrom } from "@/lib/signup-mode";
+import { countsAsBlockingOwner, isDemoEmail, signupModeFrom } from "@/lib/signup-mode";
 import { assertSameWorkspace, AuthzError } from "@/lib/authz";
 import { validatePassword } from "@/lib/password";
 import { generateTotp, generateTotpSecret, verifyTotp } from "@/lib/totp";
@@ -41,6 +41,18 @@ describe("signup mode and CSRF", () => {
     expect(signupModeFrom({ ownerExists: true })).toBe("closed");
     expect(signupModeFrom({ envMode: "invite", ownerExists: true })).toBe("invite");
     expect(signupModeFrom({ envMode: "open", ownerExists: true })).toBe("open");
+  });
+
+  it("does not treat disabled or demo users as a blocking owner", () => {
+    expect(isDemoEmail("demo@spotted.app")).toBe(true);
+    expect(countsAsBlockingOwner({ email: "demo@spotted.app", disabled: false })).toBe(false);
+    expect(countsAsBlockingOwner({ email: "you@brand.com", disabled: true })).toBe(false);
+    expect(countsAsBlockingOwner({ email: "you@brand.com", disabled: false })).toBe(true);
+    const createOwner = readFileSync("scripts/create-owner.ts", "utf8");
+    expect(createOwner).toMatch(/ownerExists/);
+    const dockerfile = readFileSync("Dockerfile", "utf8");
+    expect(dockerfile).toMatch(/COPY --from=builder \/app\/scripts \.\/scripts/);
+    expect(readFileSync("package.json", "utf8")).toMatch(/"tsx":\s*"\^4/);
   });
 
   it("allows safe methods and same-origin POSTs, rejects cross-origin", () => {

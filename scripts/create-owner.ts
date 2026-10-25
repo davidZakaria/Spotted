@@ -4,6 +4,7 @@ import { prisma } from "../src/lib/db";
 import { hashPassword, validatePassword } from "../src/lib/password";
 import { uniqueSlug } from "../src/lib/utils";
 import { writeAudit } from "../src/lib/audit";
+import { ownerExists } from "../src/lib/signup-mode";
 
 async function readPassword() {
   if (process.env.OWNER_PASSWORD?.trim()) return process.env.OWNER_PASSWORD.trim();
@@ -27,8 +28,7 @@ async function main() {
   if (!email || !email.includes("@")) {
     throw new Error("Set OWNER_EMAIL to the owner login");
   }
-  const existingOwner = await prisma.membership.findFirst({ where: { role: "OWNER" } });
-  if (existingOwner && process.env.FORCE_OWNER !== "true") {
+  if ((await ownerExists()) && process.env.FORCE_OWNER !== "true") {
     throw new Error("An owner already exists. Set FORCE_OWNER=true to add another.");
   }
   const password = await readPassword();

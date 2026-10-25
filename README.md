@@ -19,11 +19,15 @@ Compose starts `spotted-db`, `spotted-redis`, `spotted-web`, and `spotted-worker
 Create the first owner (do not leave `SEED_DEMO` on in production):
 
 ```bash
-OWNER_EMAIL=you@yourbrand.com OWNER_PASSWORD='A-strong-Pass1!' npm run auth:create-owner
+# Inside the web container (scripts/ and tsx ship in the image):
+docker compose exec spotted-web \
+  env OWNER_EMAIL=you@yourbrand.com OWNER_PASSWORD='A-strong-Pass1!' \
+  npm run auth:create-owner
 # Encrypt any tokens stored before ENCRYPTION_KEY was set:
-npm run auth:encrypt-tokens
-# If an old demo user exists:
-npm run auth:disable-demo          # or: npm run auth:disable-demo -- --delete
+docker compose exec spotted-web npm run auth:encrypt-tokens
+# If an old demo user exists (demo/disabled owners do not block create-owner):
+docker compose exec spotted-web npm run auth:disable-demo
+# or: docker compose exec spotted-web npm run auth:disable-demo -- --delete
 ```
 
 Local demo seed is opt-in: `SEED_DEMO=true npm run db:seed` (`demo@spotted.app` / `demo1234`).

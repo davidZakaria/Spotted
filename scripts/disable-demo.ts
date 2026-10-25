@@ -1,7 +1,8 @@
 import { prisma } from "../src/lib/db";
 import { writeAudit } from "../src/lib/audit";
+import { DEMO_EMAILS } from "../src/lib/signup-mode";
 
-const DEMO_EMAIL = "demo@spotted.app";
+const DEMO_EMAIL = DEMO_EMAILS[0];
 
 async function main() {
   const del = process.argv.includes("--delete") || process.env.DEMO_ACTION === "delete";
