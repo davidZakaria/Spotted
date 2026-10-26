@@ -15,6 +15,17 @@ function migrationSql() {
 }
 
 describe("prisma schema and migrations", () => {
+  it("adds GOOGLE_MAPS, Mention.rating, and Keyword requiredAny with idempotent SQL", () => {
+    const schema = readFileSync("prisma/schema.prisma", "utf8");
+    expect(schema).toMatch(/GOOGLE_MAPS/);
+    expect(schema).toMatch(/requiredAny\s+String\[\]/);
+    expect(schema).toMatch(/requiredAnyWhen\s+String\[\]/);
+    expect(schema).toMatch(/model Mention[\s\S]*rating\s+Int\?/);
+    expect(migrationSql()).toMatch(/ALTER TYPE "Source" ADD VALUE IF NOT EXISTS 'GOOGLE_MAPS'/);
+    expect(migrationSql()).toMatch(/ADD COLUMN IF NOT EXISTS "requiredAny"/);
+    expect(migrationSql()).toMatch(/ADD COLUMN IF NOT EXISTS "rating"/);
+  });
+
   it("adds Mention.complaint and AlertType COMPLAINT with idempotent SQL", () => {
     const schema = readFileSync("prisma/schema.prisma", "utf8");
     expect(schema).toMatch(/model Mention[\s\S]*complaint\s+Boolean\s+@default\(false\)/);

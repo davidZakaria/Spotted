@@ -5,6 +5,7 @@ import { redditConnector } from "./reddit";
 import { hnConnector } from "./hackernews";
 import { rssConnector } from "./rss";
 import { googleAlertsConnector, googleBusinessConnector, googleNewsConnector, googleTrendsConnector } from "./google";
+import { googleMapsConnector } from "./maps";
 import { quoraConnector, webSearchConnector } from "./websearch";
 import { blueskyConnector } from "./bluesky";
 import { mastodonConnector } from "./mastodon";
@@ -30,6 +31,7 @@ const connectors: Connector[] = [
   googleNewsConnector,
   webSearchConnector,
   googleAlertsConnector,
+  googleMapsConnector,
   googleBusinessConnector,
   googleTrendsConnector,
   blueskyConnector,

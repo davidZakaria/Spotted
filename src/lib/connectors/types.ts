@@ -46,6 +46,18 @@ export type ProjectConfig = {
   webSearchProvider?: "brave" | "serpapi";
   podcastQueries?: string[];
   backfilledAt?: string;
+  excludeWords?: string[];
+  googleMapsPlaces?: GoogleMapsPlace[];
+  googleMapsIntervalHours?: number;
+};
+
+export type GoogleMapsPlace = {
+  dataId?: string;
+  placeId?: string;
+  label: string;
+  query?: string;
+  mapsUrl?: string;
+  lastFetchedAt?: string;
 };
 
 export type ConnectorContext = {
@@ -88,6 +100,7 @@ export type RawMention = {
   followerCount?: number;
   kind?: string;
   parentExternalId?: string;
+  rating?: number;
   raw?: unknown;
 };
 

@@ -9,6 +9,8 @@ import { MentionCard } from "@/components/mention-card";
 import { VolumeChart } from "@/components/charts";
 import { formatNumber } from "@/lib/utils";
 import { t } from "@/lib/i18n";
+import { BrandListenSettings } from "@/components/brand-listen-settings";
+import type { ProjectConfig } from "@/lib/connectors/types";
 
 export default async function ProjectOverview({ params }: { params: Promise<{ id: string }> }) {
   const session = await requireSession();
@@ -19,6 +21,7 @@ export default async function ProjectOverview({ params }: { params: Promise<{ id
     include: { keywords: true, warnings: { where: { resolved: false }, take: 5, orderBy: { createdAt: "desc" } } },
   });
   if (!project) notFound();
+  const config = (project.config ?? {}) as ProjectConfig;
   const stats = await projectAnalytics(project.id, 7);
   const mentions = await prisma.mention.findMany({
     where: { projectId: project.id },
@@ -76,6 +79,14 @@ export default async function ProjectOverview({ params }: { params: Promise<{ id
       >
         <VolumeChart data={stats.series} />
       </ChartBlock>
+      <BrandListenSettings
+        projectId={project.id}
+        locale={locale}
+        excludeWords={config.excludeWords ?? []}
+        places={config.googleMapsPlaces ?? []}
+        intervalHours={config.googleMapsIntervalHours}
+        keywords={project.keywords}
+      />
       {project.keywords.length ? (
         <div className="card space-y-3 p-5">
           <h2 className="font-semibold">{locale === "ar" ? "الكلمات المراقبة" : "Watched words"}</h2>

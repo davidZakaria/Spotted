@@ -309,6 +309,26 @@ export const PLATFORMS: PlatformInfo[] = [
     stepsAr: ["اربط تويتش.", "نجد البثوث والفيديوهات عن كلماتك."],
   },
   {
+    id: "GOOGLE_MAPS",
+    name: "Google Maps reviews",
+    nameAr: "مراجعات خرائط جوجل",
+    blurb: "Public reviews on offices you watch. Uses your monthly Google search budget.",
+    blurbAr: "مراجعات عامة للأماكن التي تراقبها. تُحسب من حد بحث جوجل الشهري.",
+    readyNow: true,
+    connectHint: "Add a Maps link or place name on the brand page. We look it up once, then check new reviews about once a day.",
+    connectHintAr: "أضف رابط خرائط أو اسم المكان في صفحة العلامة. نبحث مرة ثم نراجع التقييمات تقريباً مرة في اليوم.",
+    steps: [
+      "On the brand page, paste a Google Maps link or the office name.",
+      "We save public reviews. One- and two-star reviews are marked negative and Complaints & risk.",
+      "This uses SerpAPI. We skip a place if it was already checked today or the monthly budget is low.",
+    ],
+    stepsAr: [
+      "في صفحة العلامة الصق رابط خرائط جوجل أو اسم المكتب.",
+      "نحفظ المراجعات العامة. نجوم واحدة أو اثنتان تُعد سلبية وشكوى.",
+      "هذا يستخدم SerpAPI. نتخطى المكان إن فُحص اليوم أو إن اقترب نفاد الحد الشهري.",
+    ],
+  },
+  {
     id: "GOOGLE_BUSINESS",
     name: "Google Business reviews",
     nameAr: "مراجعات جوجل للأعمال",

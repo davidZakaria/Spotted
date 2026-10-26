@@ -117,6 +117,19 @@ export function selectSerpSynonyms(
   };
 }
 
+export function appendSerpExcludes(query: string, excludes: string[] | undefined, wordLimit = SERP_QUERY_WORD_LIMIT) {
+  let next = query.trim();
+  if (!next) return next;
+  for (const term of excludes ?? []) {
+    const cleaned = term.trim().replace(/"/g, "");
+    if (!cleaned) continue;
+    const extra = ` -${serpTerm(cleaned)}`;
+    if (queryWordCount(next + extra) > wordLimit) continue;
+    next += extra;
+  }
+  return next;
+}
+
 export function sourceUsesPackedSerpQuery(
   source: Source,
   e: Record<string, string | undefined> = process.env,

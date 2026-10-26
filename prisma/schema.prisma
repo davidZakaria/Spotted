@@ -55,6 +55,7 @@ enum Source {
   APP_STORE
   PLAY_STORE
   SNAPCHAT
+  GOOGLE_MAPS
 }
 
 enum Sentiment {
@@ -205,6 +206,8 @@ model Keyword {
   excludedWords String[]  @default([])
   booleanQuery  String?
   synonyms      String[]  @default([])
+  requiredAny   String[]  @default([])
+  requiredAnyWhen String[] @default([])
   autoVariants  Boolean   @default(true)
   backfilledAt  DateTime?
   projectId     String
@@ -241,6 +244,7 @@ model Mention {
   sentiment     Sentiment @default(UNKNOWN)
   sentimentScore Float?
   complaint     Boolean   @default(false)
+  rating        Int?
   topics        String[]
   raw           Json?
   project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)

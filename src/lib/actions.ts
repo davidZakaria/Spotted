@@ -29,6 +29,8 @@ import { KEYLESS_DEFAULTS } from "./connectors/registry";
 import { buildCsvReport, buildPdfReport } from "./reports";
 import { evaluateAlerts } from "./jobs/alerts";
 import { csvWords } from "./listen/query";
+import { mapsIntervalHours, resolveMapsPlace } from "./listen/maps";
+import type { GoogleMapsPlace, ProjectConfig } from "./connectors/types";
 
 export async function createProjectAction(formData: FormData) {
   const session = await requireSession();
@@ -86,6 +88,8 @@ export async function keepWatchingAction(formData: FormData) {
     excludedWords: csvWords(String(formData.get("excluded") ?? "")),
     booleanQuery: String(formData.get("boolean") ?? "") || null,
     synonyms: csvWords(String(formData.get("synonyms") ?? "")),
+    requiredAny: csvWords(String(formData.get("requiredAny") ?? "")),
+    requiredAnyWhen: csvWords(String(formData.get("requiredAnyWhen") ?? "")),
     autoVariants: formData.get("autoVariants") !== "off",
   };
   const existing = await prisma.keyword.findFirst({ where: { projectId, phrase } });
@@ -131,6 +135,115 @@ export async function listenNowAction(projectId: string) {
   revalidatePath("/app");
   revalidatePath("/app/mentions");
   revalidatePath("/app/analytics");
+}
+
+async function loadProjectConfig(workspaceId: string, projectId: string) {
+  const project = await prisma.project.findFirst({ where: { id: projectId, workspaceId } });
+  if (!project) throw new Error("Brand not found");
+  return { project, config: (project.config ?? {}) as ProjectConfig };
+}
+
+export async function saveIgnoreWordsAction(formData: FormData) {
+  const session = await requireSession();
+  if (!canEdit(session.role)) throw new Error("You need editor access");
+  const projectId = String(formData.get("projectId") ?? "");
+  await projectInWorkspace(session.workspaceId, projectId);
+  const { project, config } = await loadProjectConfig(session.workspaceId, projectId);
+  await prisma.project.update({
+    where: { id: project.id },
+    data: { config: { ...config, excludeWords: csvWords(String(formData.get("excludeWords") ?? "")) } },
+  });
+  revalidatePath(`/app/projects/${projectId}`);
+  revalidatePath("/app/mentions");
+}
+
+export async function saveKeywordContextAction(formData: FormData) {
+  const session = await requireSession();
+  if (!canEdit(session.role)) throw new Error("You need editor access");
+  const projectId = String(formData.get("projectId") ?? "");
+  const keywordId = String(formData.get("keywordId") ?? "");
+  await projectInWorkspace(session.workspaceId, projectId);
+  const keyword = await prisma.keyword.findFirst({ where: { id: keywordId, projectId } });
+  if (!keyword) throw new Error("Watched word not found");
+  await prisma.keyword.update({
+    where: { id: keyword.id },
+    data: {
+      requiredAny: csvWords(String(formData.get("requiredAny") ?? "")),
+      requiredAnyWhen: csvWords(String(formData.get("requiredAnyWhen") ?? "")),
+    },
+  });
+  revalidatePath(`/app/projects/${projectId}`);
+}
+
+export async function addGoogleMapsPlaceAction(formData: FormData) {
+  const session = await requireSession();
+  if (!canEdit(session.role)) throw new Error("You need editor access");
+  const projectId = String(formData.get("projectId") ?? "");
+  const raw = String(formData.get("place") ?? "").trim();
+  const label = String(formData.get("label") ?? "").trim();
+  if (!raw) throw new Error("Paste a Google Maps link or the name of the place");
+  await projectInWorkspace(session.workspaceId, projectId);
+  const { project, config } = await loadProjectConfig(session.workspaceId, projectId);
+  const resolved = await resolveMapsPlace({
+    query: raw,
+    workspaceId: session.workspaceId,
+    projectId,
+    country: "eg",
+  });
+  if (!resolved.place) throw new Error(resolved.skipped || "We could not find that place");
+  const place: GoogleMapsPlace = {
+    ...resolved.place,
+    label: label || resolved.place.label || raw,
+    query: raw,
+  };
+  const existing = config.googleMapsPlaces ?? [];
+  const key = place.dataId || place.placeId || place.label;
+  const next = existing.filter((item) => (item.dataId || item.placeId || item.label) !== key);
+  next.push(place);
+  await prisma.project.update({
+    where: { id: project.id },
+    data: { config: { ...config, googleMapsPlaces: next } },
+  });
+  revalidatePath(`/app/projects/${projectId}`);
+}
+
+export async function removeGoogleMapsPlaceAction(formData: FormData) {
+  const session = await requireSession();
+  if (!canEdit(session.role)) throw new Error("You need editor access");
+  const projectId = String(formData.get("projectId") ?? "");
+  const key = String(formData.get("placeKey") ?? "");
+  await projectInWorkspace(session.workspaceId, projectId);
+  const { project, config } = await loadProjectConfig(session.workspaceId, projectId);
+  await prisma.project.update({
+    where: { id: project.id },
+    data: {
+      config: {
+        ...config,
+        googleMapsPlaces: (config.googleMapsPlaces ?? []).filter(
+          (item) => (item.dataId || item.placeId || item.label) !== key,
+        ),
+      },
+    },
+  });
+  revalidatePath(`/app/projects/${projectId}`);
+}
+
+export async function saveMapsIntervalAction(formData: FormData) {
+  const session = await requireSession();
+  if (!canEdit(session.role)) throw new Error("You need editor access");
+  const projectId = String(formData.get("projectId") ?? "");
+  await projectInWorkspace(session.workspaceId, projectId);
+  const { project, config } = await loadProjectConfig(session.workspaceId, projectId);
+  await prisma.project.update({
+    where: { id: project.id },
+    data: {
+      config: {
+        ...config,
+        googleMapsIntervalHours: mapsIntervalHours(Number(formData.get("hours") ?? 24)),
+      },
+    },
+  });
+  revalidatePath(`/app/projects/${projectId}`);
 }
 
 export async function createAlertAction(formData: FormData) {

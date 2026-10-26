@@ -9,6 +9,8 @@ export type KeywordRule = {
   language?: string | null;
   country?: string | null;
   synonyms?: string[];
+  requiredAny?: string[];
+  requiredAnyWhen?: string[];
   autoVariants?: boolean;
 };
 
@@ -201,6 +203,52 @@ export function mentionSearchText(mention: { title?: string | null; content?: st
   return [mention.title, mention.content].filter((part) => Boolean(part && String(part).trim())).join("\n");
 }
 
+export function containsAnyWord(text: string, words: string[] | undefined) {
+  const hay = normalizeText(text);
+  if (!hay) return false;
+  return (words ?? []).some((word) => {
+    const needle = word.trim();
+    if (!needle) return false;
+    if (needle === "*" || needle.toLowerCase() === "{arabic}") return isArabicText(text);
+    return includesNeedle(hay, normalizeText(needle));
+  });
+}
+
+export function hasRequiredAny(text: string, words: string[] | undefined) {
+  const list = (words ?? []).map((word) => word.trim()).filter(Boolean);
+  if (!list.length) return true;
+  return containsAnyWord(text, list);
+}
+
+export function matchedOnlyTriggerTerms(text: string, rule: KeywordRule) {
+  const triggers = (rule.requiredAnyWhen ?? []).map((term) => term.trim()).filter(Boolean);
+  if (!triggers.length) return Boolean((rule.requiredAny ?? []).length);
+  const triggerKeys = new Set(triggers.flatMap((term) => expandVariants(term).map((item) => normalizeText(item).replace(/\s+/g, ""))));
+  const phraseIsTrigger = triggerKeys.has(normalizeText(rule.phrase).replace(/\s+/g, ""));
+  const leftoverSynonyms = (rule.synonyms ?? []).filter(
+    (term) => !triggerKeys.has(normalizeText(term).replace(/\s+/g, "")),
+  );
+  const withoutTriggers: KeywordRule = {
+    ...rule,
+    phrase: phraseIsTrigger ? "__no_trigger_phrase__" : rule.phrase,
+    synonyms: leftoverSynonyms,
+    requiredAny: [],
+    requiredAnyWhen: [],
+  };
+  if (!phraseIsTrigger && leftoverSynonyms.length === (rule.synonyms ?? []).length) {
+    return false;
+  }
+  return !mentionMatches(text, withoutTriggers);
+}
+
+export function keepMention(text: string, rule: KeywordRule, projectExcludes: string[] = []) {
+  if (containsAnyWord(text, projectExcludes)) return false;
+  if (!mentionMatches(text, rule)) return false;
+  if (!rule.requiredAny?.length) return true;
+  if (!matchedOnlyTriggerTerms(text, rule)) return true;
+  return hasRequiredAny(text, rule.requiredAny);
+}
+
 export function mentionMatches(text: string, rule: KeywordRule) {
   const hay = normalizeText(text);
   if (!hay) return false;
@@ -241,6 +289,8 @@ export function ruleFromPhrase(phrase: string, extras: Partial<KeywordRule> = {}
     language: extras.language ?? null,
     country: extras.country ?? null,
     synonyms: extras.synonyms ?? [],
+    requiredAny: extras.requiredAny ?? [],
+    requiredAnyWhen: extras.requiredAnyWhen ?? [],
     autoVariants: extras.autoVariants ?? true,
   };
 }

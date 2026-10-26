@@ -273,6 +273,7 @@ export function LiveSearch({
                 kind: hit.kind,
                 sentiment: hit.sentiment,
                 complaint: hit.complaint ?? false,
+                rating: hit.rating ?? null,
                 publishedAt: new Date(hit.publishedAt),
                 language: hit.language ?? null,
               }}

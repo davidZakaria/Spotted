@@ -30,6 +30,10 @@ docker compose exec spotted-web npm run auth:disable-demo
 # or: docker compose exec spotted-web npm run auth:disable-demo -- --delete
 # Re-score saved mentions with the Arabic/English complaint lexicon:
 docker compose exec spotted-web npm run sentiment:rescore
+# After deploy: add NJD ignore words, Egypt-context rules, and the Cairo Maps office (1 SerpAPI search):
+docker compose exec spotted-web npm run maps:seed-njd
+# Drop saved US New Jersey noise (and other mentions that fail the new rules):
+docker compose exec spotted-web npm run mentions:cleanup-njd
 ```
 
 Local demo seed is opt-in: `SEED_DEMO=true npm run db:seed` (`demo@spotted.app` / `demo1234`).
@@ -70,6 +74,7 @@ Every source implements the same interface: keyword/hashtag/mention listening, p
 | Hacker News | Keyword + author + comments | — | No write API |
 | RSS / news | Feed URLs | — | No comments |
 | Google News | RSS search | — | Index only |
+| Google Maps reviews | Public reviews for places you add | `SERPAPI_API_KEY` | One `google_maps` lookup per new place, then one `google_maps_reviews` page per place per day. Skipped when the monthly budget is low. |
 | Google Alerts | User-pasted alert RSS | — | You create the alert on Google |
 | Bluesky | Public search + profiles (`api.bsky.app`, then `public.api.bsky.app`) | App password to post, or if public AppView returns 403 | — |
 | Mastodon | Instance search / hashtags | OAuth to post / DMs | Search depends on the instance |

@@ -5,13 +5,14 @@ import { persistMentions } from "@/lib/jobs/ingest";
 import { analyzeSentiment } from "@/lib/sentiment";
 import { detectLanguage } from "@/lib/language";
 import { dedupeMentions, influenceScore } from "./dedupe";
-import { mentionMatches, mentionSearchText, searchQueries, type KeywordRule } from "./query";
+import { keepMention, mentionSearchText, searchQueries, type KeywordRule } from "./query";
 import { liveSourcePlan, type LiveSourceStatus } from "./sources";
 import { serpUsageSummary } from "./serpapi";
 import { searchQueryCap } from "./forum-serp";
 import { isValidDate, parsePublishedAt, safeIso } from "./dates";
 import { tokenOf } from "@/lib/crypto";
-import { selectSerpSynonyms, sourceUsesPackedSerpQuery } from "./synonyms";
+import { appendSerpExcludes, selectSerpSynonyms, sourceUsesPackedSerpQuery } from "./synonyms";
+import { applyReviewSentiment } from "./maps";
 
 export type LiveHit = {
   source: Source;
@@ -24,6 +25,7 @@ export type LiveHit = {
   publishedAt: string;
   sentiment: "POSITIVE" | "NEUTRAL" | "NEGATIVE" | "UNKNOWN";
   complaint?: boolean;
+  rating?: number;
   language?: string;
   influence: number;
   reach: number;
@@ -53,7 +55,10 @@ export async function searchOneSource(input: {
   const connector = getConnector(input.source);
   if (!connector) return [];
   const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-  const serpQuery = selectSerpSynonyms(input.rule, { rotateLeftovers: false }).query;
+  const serpQuery = appendSerpExcludes(
+    selectSerpSynonyms(input.rule, { rotateLeftovers: false }).query,
+    [...(input.rule.excludedWords ?? []), ...(input.config.excludeWords ?? [])],
+  );
   const queries = sourceUsesPackedSerpQuery(input.source)
     ? [serpQuery]
     : searchQueries(input.rule, searchQueryCap(input.source));
@@ -82,14 +87,14 @@ export async function searchOneSource(input: {
     out.filter((mention) => {
       mention.publishedAt = parsePublishedAt(mention.publishedAt);
       if (isValidDate(mention.publishedAt) && mention.publishedAt < since) return false;
-      return mentionMatches(mentionSearchText(mention), input.rule);
+      return keepMention(mentionSearchText(mention), input.rule, input.config.excludeWords ?? []);
     }),
   );
 }
 
 export async function toLiveHit(mention: RawMention): Promise<LiveHit> {
   const text = mentionSearchText(mention);
-  const sentiment = await analyzeSentiment(text);
+  const sentiment = applyReviewSentiment(await analyzeSentiment(text), mention.rating);
   const language = detectLanguage(text);
   return {
     source: mention.source,
@@ -102,6 +107,7 @@ export async function toLiveHit(mention: RawMention): Promise<LiveHit> {
     publishedAt: safeIso(parsePublishedAt(mention.publishedAt)),
     sentiment: sentiment.sentiment,
     complaint: sentiment.complaint,
+    rating: mention.rating,
     language: language.language,
     influence: influenceScore(mention),
     reach: mention.reach ?? mention.viewCount ?? mention.followerCount ?? 0,

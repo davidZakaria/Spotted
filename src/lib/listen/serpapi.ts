@@ -6,6 +6,18 @@ import { parsePublishedAt } from "./dates";
 
 export const SERPAPI_SOURCE: Source = "WEB_SEARCH";
 export const SERPAPI_SCHEDULED_PER_KEYWORD = 2;
+export type SerpEngine = "google" | "google_news" | "google_maps" | "google_maps_reviews";
+
+export function serpReserve(e: Record<string, string | undefined> = process.env) {
+  const n = Number(e.SERPAPI_RESERVE ?? 10);
+  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 10;
+}
+
+export function serpBudgetLow(remaining: number, limit: number, e: Record<string, string | undefined> = process.env) {
+  if (remaining <= 0) return true;
+  const reserve = serpReserve(e);
+  return remaining <= reserve || remaining < Math.ceil(Math.max(limit, 1) * 0.04);
+}
 
 export function serpMonthlyLimit(e: Record<string, string | undefined> = process.env) {
   const n = Number(e.SERPAPI_MONTHLY_LIMIT ?? 250);
@@ -88,7 +100,7 @@ export async function recordSerpCall(input: {
   workspaceId?: string;
   purpose: "live" | "scheduled" | "backfill";
   keywordKey?: string;
-  engine: "google" | "google_news";
+  engine: SerpEngine;
 }) {
   if (!input.workspaceId) return;
   const key = (input.keywordKey || "default").slice(0, 80);

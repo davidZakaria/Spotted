@@ -21,7 +21,9 @@
     "auth:encrypt-tokens": "tsx scripts/encrypt-tokens.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "sentiment:rescore": "tsx scripts/rescore-sentiment.ts"
+    "sentiment:rescore": "tsx scripts/rescore-sentiment.ts",
+    "maps:seed-njd": "tsx scripts/seed-njd-maps.ts",
+    "mentions:cleanup-njd": "tsx scripts/cleanup-njd-mentions.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

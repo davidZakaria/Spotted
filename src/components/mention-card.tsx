@@ -8,7 +8,7 @@ import { HISTORY_SCAN_KIND, HISTORY_SCAN_LABEL, HISTORY_SCAN_LABEL_AR } from "@/
 type MentionLike = Pick<
   Mention,
   "id" | "url" | "title" | "content" | "authorName" | "authorHandle" | "source" | "sentiment" | "publishedAt" | "language"
-> & { project?: { name: string }; kind?: string | null; complaint?: boolean | null };
+> & { project?: { name: string }; kind?: string | null; complaint?: boolean | null; rating?: number | null };
 
 export function MentionCard({
   mention,
@@ -54,6 +54,11 @@ export function MentionCard({
               <span>· {when}</span>
             </div>
             <span className="flex flex-wrap items-center gap-1.5">
+              {mention.rating != null ? (
+                <Badge tone={mention.rating <= 2 ? "bad" : mention.rating >= 4 ? "good" : "muted"}>
+                  {mention.rating}★
+                </Badge>
+              ) : null}
               {mention.complaint ? (
                 <Badge tone="bad">{t(locale, "complaintsRisk")}</Badge>
               ) : null}

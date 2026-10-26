@@ -6,7 +6,7 @@ import { detectLanguage } from "../language";
 import { analyzeSentiment, extractTopics } from "../sentiment";
 import { getConnector, KEYLESS_DEFAULTS } from "../connectors/registry";
 import type { ProjectConfig, RawMention } from "../connectors/types";
-import { mentionMatches, mentionSearchText, ruleFromPhrase, searchQueries, type KeywordRule } from "../listen/query";
+import { containsAnyWord, keepMention, mentionSearchText, ruleFromPhrase, searchQueries, type KeywordRule } from "../listen/query";
 import { searchQueryCap } from "../listen/forum-serp";
 import { dedupeMentions } from "../listen/dedupe";
 import {
@@ -20,11 +20,14 @@ import {
 } from "../listen/backfill";
 import { hasSerpApi, runSerpSearch } from "../listen/serpapi";
 import {
+  appendSerpExcludes,
   FREE_SPLIT_QUERY_CAP,
   selectSerpSynonyms,
   sourceUsesPackedSerpQuery,
   synonymRotationSlot,
 } from "../listen/synonyms";
+import { applyReviewSentiment, fetchMapsReviews, mapsIntervalHours } from "../listen/maps";
+import type { GoogleMapsPlace } from "../connectors/types";
 
 export function mergeConnectedSources(
   sources: Source[],
@@ -51,7 +54,7 @@ export function pageIdsFromAccounts(
   ];
 }
 
-export function ruleFromKeyword(keyword: Pick<Keyword, "phrase" | "matchType" | "language" | "country" | "requiredWords" | "excludedWords" | "booleanQuery" | "synonyms" | "autoVariants">): KeywordRule {
+export function ruleFromKeyword(keyword: Pick<Keyword, "phrase" | "matchType" | "language" | "country" | "requiredWords" | "excludedWords" | "booleanQuery" | "synonyms" | "requiredAny" | "requiredAnyWhen" | "autoVariants">): KeywordRule {
   return ruleFromPhrase(keyword.phrase, {
     matchType: keyword.matchType,
     language: keyword.language,
@@ -60,6 +63,8 @@ export function ruleFromKeyword(keyword: Pick<Keyword, "phrase" | "matchType" | 
     excludedWords: keyword.excludedWords,
     booleanQuery: keyword.booleanQuery,
     synonyms: keyword.synonyms,
+    requiredAny: keyword.requiredAny,
+    requiredAnyWhen: keyword.requiredAnyWhen,
     autoVariants: keyword.autoVariants,
   });
 }
@@ -77,7 +82,7 @@ export async function persistMentions(
     byKey.delete(`${row.mention.source}:${row.mention.externalId}`);
     const searchText = mentionSearchText(mention);
     const lang = detectLanguage(searchText);
-    const sentiment = await analyzeSentiment(searchText);
+    const sentiment = applyReviewSentiment(await analyzeSentiment(searchText), mention.rating);
     try {
       await prisma.mention.upsert({
         where: {
@@ -113,6 +118,7 @@ export async function persistMentions(
           sentiment: sentiment.sentiment,
           sentimentScore: sentiment.sentimentScore,
           complaint: sentiment.complaint,
+          rating: mention.rating,
           topics: extractTopics([mention.content], 4).map((topic) => topic.topic),
           raw: mention.raw as object | undefined,
         },
@@ -129,6 +135,7 @@ export async function persistMentions(
           sentiment: sentiment.sentiment,
           sentimentScore: sentiment.sentimentScore,
           complaint: sentiment.complaint,
+          rating: mention.rating,
           language: lang.language,
         },
       });
@@ -194,8 +201,9 @@ async function collectFromSources(input: {
               skipSerp: index > 0,
             };
             const found = await connector.search(ctx);
+            const excludes = input.config.excludeWords ?? [];
             for (const mention of found) {
-              if (!mentionMatches(mentionSearchText(mention), rule)) continue;
+              if (!keepMention(mentionSearchText(mention), rule, excludes)) continue;
               mention.publishedAt = parsePublishedAt(mention.publishedAt);
               if (isValidDate(mention.publishedAt) && mention.publishedAt < input.since) continue;
               collected.push({
@@ -206,7 +214,7 @@ async function collectFromSources(input: {
             if (input.includeTrackAccounts && connector.trackAccounts) {
               const tracked = await connector.trackAccounts(ctx);
               for (const mention of tracked) {
-                if (!mentionMatches(mentionSearchText(mention), rule)) continue;
+                if (!keepMention(mentionSearchText(mention), rule, excludes)) continue;
                 collected.push({ mention, keywordId: keyword?.id });
               }
             }
@@ -234,6 +242,7 @@ async function collectBackfillSerp(input: {
   since: Date;
   languages?: string[];
   timezone?: string | null;
+  excludeWords?: string[];
 }) {
   if (!hasSerpApi()) return [] as { mention: RawMention; keywordId?: string }[];
   const planned = backfillSerpQuery(input.row.rule, {
@@ -242,7 +251,7 @@ async function collectBackfillSerp(input: {
     rotateLeftovers: false,
   });
   const serp = await runSerpSearch({
-    query: planned.query,
+    query: appendSerpExcludes(planned.query, [...(input.row.rule.excludedWords ?? []), ...(input.excludeWords ?? [])]),
     engine: "google",
     purpose: "backfill",
     workspaceId: input.workspaceId,
@@ -255,7 +264,7 @@ async function collectBackfillSerp(input: {
   });
   const out: { mention: RawMention; keywordId?: string }[] = [];
   for (const mention of serp.mentions) {
-    if (!mentionMatches(mentionSearchText(mention), input.row.rule)) continue;
+    if (!keepMention(mentionSearchText(mention), input.row.rule, input.excludeWords ?? [])) continue;
     mention.publishedAt = parsePublishedAt(mention.publishedAt);
     if (isValidDate(mention.publishedAt) && mention.publishedAt < input.since) continue;
     out.push({ mention: markHistoryScan(mention), keywordId: input.row.keyword?.id });
@@ -320,14 +329,17 @@ export async function ingestProject(
           keyword,
           rule,
           queries: searchQueries(rule, FREE_SPLIT_QUERY_CAP),
-          serpQuery: selectSerpSynonyms(rule, {
-            rotation: synonymRotationSlot(keyword.id),
-            rotateLeftovers: true,
-            preferArabic: wantsArabicCoverage(rule, {
-              languages: config.languages,
-              timezone: project.workspace.timezone,
-            }),
-          }).query,
+          serpQuery: appendSerpExcludes(
+            selectSerpSynonyms(rule, {
+              rotation: synonymRotationSlot(keyword.id),
+              rotateLeftovers: true,
+              preferArabic: wantsArabicCoverage(rule, {
+                languages: config.languages,
+                timezone: project.workspace.timezone,
+              }),
+            }).query,
+            [...(rule.excludedWords ?? []), ...(config.excludeWords ?? [])],
+          ),
         };
       })
     : [
@@ -335,7 +347,10 @@ export async function ingestProject(
           keyword: undefined,
           rule: ruleFromPhrase(project.name),
           queries: searchQueries(ruleFromPhrase(project.name), FREE_SPLIT_QUERY_CAP),
-          serpQuery: selectSerpSynonyms(ruleFromPhrase(project.name)).query,
+          serpQuery: appendSerpExcludes(
+            selectSerpSynonyms(ruleFromPhrase(project.name)).query,
+            config.excludeWords,
+          ),
         },
       ];
   const targeted = opts.keywordId
@@ -376,6 +391,7 @@ export async function ingestProject(
           since: backfillSince,
           languages: config.languages,
           timezone: project.workspace.timezone,
+          excludeWords: config.excludeWords,
         })),
       );
       if (row.keyword) {
@@ -401,7 +417,76 @@ export async function ingestProject(
     }
   }
 
+  if (!opts.keywordId) {
+    collected.push(
+      ...(await collectMapsReviews({
+        projectId: project.id,
+        workspaceId: project.workspaceId,
+        config,
+      })),
+    );
+  }
+
   return persistMentions(project.id, collected);
+}
+
+async function collectMapsReviews(input: {
+  projectId: string;
+  workspaceId: string;
+  config: ProjectConfig;
+}) {
+  const places = input.config.googleMapsPlaces ?? [];
+  if (!places.length) return [] as { mention: RawMention; keywordId?: string }[];
+  const interval = mapsIntervalHours(input.config.googleMapsIntervalHours);
+  const nextPlaces: GoogleMapsPlace[] = [];
+  const out: { mention: RawMention; keywordId?: string }[] = [];
+  const excludes = input.config.excludeWords ?? [];
+  for (const place of places) {
+    try {
+      const result = await fetchMapsReviews({
+        place,
+        workspaceId: input.workspaceId,
+        projectId: input.projectId,
+        intervalHours: interval,
+      });
+      nextPlaces.push(result.place);
+      const expectedSkip =
+        !result.skipped ||
+        /already checked today|quota is low|key is missing/i.test(result.skipped);
+      if (result.skipped && !expectedSkip) {
+        await prisma.connectorWarning.create({
+          data: {
+            projectId: input.projectId,
+            source: "GOOGLE_MAPS",
+            code: "maps_skip",
+            message: result.skipped,
+          },
+        });
+      }
+      for (const mention of result.mentions) {
+        if (containsAnyWord(mentionSearchText(mention), excludes)) continue;
+        out.push({ mention });
+      }
+    } catch (error) {
+      nextPlaces.push(place);
+      await prisma.connectorWarning.create({
+        data: {
+          projectId: input.projectId,
+          source: "GOOGLE_MAPS",
+          code: "maps_error",
+          message: error instanceof Error ? error.message : "Maps reviews failed",
+        },
+      });
+    }
+  }
+  if (JSON.stringify(nextPlaces) !== JSON.stringify(places)) {
+    await prisma.project.update({
+      where: { id: input.projectId },
+      data: { config: { ...input.config, googleMapsPlaces: nextPlaces } },
+    });
+    input.config.googleMapsPlaces = nextPlaces;
+  }
+  return out;
 }
 
 export async function ingestAllActive() {
