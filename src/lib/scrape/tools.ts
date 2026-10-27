@@ -204,6 +204,110 @@ export const SCRAPE_TOOLS: ScrapeTool[] = [
     ],
   },
   {
+    id: "linkedin-profiles",
+    name: "LinkedIn profiles",
+    nameAr: "ملفات لينكدإن",
+    helper:
+      "Paste public profile links. We copy name, headline, location, current job, experience, education, skills, about, followers, and the profile URL. Public data only — follow LinkedIn’s terms and privacy laws. No login.",
+    helperAr:
+      "الصق روابط الملفات العامة. ننسخ الاسم والعنوان والمكان والعمل الحالي والخبرة والتعليم والمهارات والنبذة والمتابعين والرابط. بيانات عامة فقط — التزم بشروط لينكدإن وقوانين الخصوصية. بلا دخول.",
+    actorId: "harvestapi/linkedin-profile-scraper",
+    source: "LINKEDIN",
+    estimateUsd: 0.3,
+    fields: [
+      {
+        name: "urls",
+        label: "Public profile links",
+        labelAr: "روابط الملفات العامة",
+        hint: "One linkedin.com/in/… link per line. About $0.004 per profile.",
+        hintAr: "رابط linkedin.com/in/… في كل سطر. حوالي 0.004 دولار لكل ملف.",
+        type: "textarea",
+        required: true,
+        placeholder: "https://www.linkedin.com/in/someone",
+      },
+    ],
+  },
+  {
+    id: "linkedin-profile-posts",
+    name: "LinkedIn profile posts",
+    nameAr: "منشورات ملف لينكدإن",
+    helper:
+      "Recent public posts by a person. After the run, save them to Mentions. Public posts only — follow LinkedIn’s terms. No login.",
+    helperAr:
+      "أحدث المنشورات العامة لشخص. بعد التشغيل احفظها في الإشارات. منشورات عامة فقط — التزم بشروط لينكدإن. بلا دخول.",
+    actorId: "harvestapi/linkedin-profile-posts",
+    source: "LINKEDIN",
+    estimateUsd: 0.4,
+    fields: [
+      {
+        name: "urls",
+        label: "Public profile links",
+        labelAr: "روابط الملفات العامة",
+        hint: "One linkedin.com/in/… link per line.",
+        hintAr: "رابط linkedin.com/in/… في كل سطر.",
+        type: "textarea",
+        required: true,
+        placeholder: "https://www.linkedin.com/in/someone",
+      },
+      {
+        name: "maxPosts",
+        label: "How many posts per person?",
+        labelAr: "كم منشوراً لكل شخص؟",
+        hint: "Start with 10. About $1.50 per 1,000 posts.",
+        hintAr: "ابدأ بـ 10. حوالي 1.50 دولار لكل 1000 منشور.",
+        type: "number",
+        placeholder: "10",
+      },
+    ],
+  },
+  {
+    id: "linkedin-people",
+    name: "Find LinkedIn people",
+    nameAr: "البحث عن أشخاص على لينكدإن",
+    helper:
+      "Build a public lead list by job title, company, and location. We do not store cookies or a LinkedIn login. Use only for public data and follow LinkedIn’s terms and privacy laws.",
+    helperAr:
+      "ابنِ قائمة عامة بالمسمى والشركة والمكان. لا نحفظ كوكيز أو حساب لينكدإن. للبيانات العامة فقط والتزم بشروط لينكدإن وقوانين الخصوصية.",
+    actorId: "harvestapi/linkedin-profile-search",
+    source: "LINKEDIN",
+    estimateUsd: 0.25,
+    fields: [
+      {
+        name: "jobTitle",
+        label: "Job title",
+        labelAr: "المسمى الوظيفي",
+        hint: "Example: Marketing Manager",
+        hintAr: "مثال: مدير تسويق",
+        placeholder: "Marketing Manager",
+      },
+      {
+        name: "company",
+        label: "Company",
+        labelAr: "الشركة",
+        hint: "Company name, or a linkedin.com/company/… link.",
+        hintAr: "اسم الشركة أو رابط linkedin.com/company/…",
+        placeholder: "New Jersey Developments",
+      },
+      {
+        name: "location",
+        label: "Location",
+        labelAr: "المكان",
+        hint: "Write it as LinkedIn would: Cairo, Egypt or United Kingdom — not UK.",
+        hintAr: "اكتبها كما في لينكدإن: Cairo, Egypt أو United Kingdom وليس UK.",
+        placeholder: "Cairo, Egypt",
+      },
+      {
+        name: "maxItems",
+        label: "How many people?",
+        labelAr: "كم شخصاً؟",
+        hint: "One page is about 25 people and about $0.10.",
+        hintAr: "الصفحة حوالي 25 شخصاً وحوالي 0.10 دولار.",
+        type: "number",
+        placeholder: "25",
+      },
+    ],
+  },
+  {
     id: "tiktok",
     name: "TikTok",
     nameAr: "تيك توك",
@@ -405,6 +509,9 @@ export function buildScrapeInput(toolId: string, value: FormData | Record<string
   const hashtags = lines(value, "hashtags").map((tag) => tag.replace(/^#/, ""));
   const profiles = lines(value, "profiles").map((name) => name.replace(/^@/, ""));
   const country = (value instanceof FormData ? String(value.get("country") ?? "") : value.country ?? "").trim();
+  const jobTitle = (value instanceof FormData ? String(value.get("jobTitle") ?? "") : value.jobTitle ?? "").trim();
+  const company = (value instanceof FormData ? String(value.get("company") ?? "") : value.company ?? "").trim();
+  const location = (value instanceof FormData ? String(value.get("location") ?? "") : value.location ?? "").trim();
   let input: Record<string, unknown> = {};
   switch (tool.id) {
     case "website":
@@ -439,6 +546,45 @@ export function buildScrapeInput(toolId: string, value: FormData | Record<string
       if (!urls.length) throw new Error("Paste a LinkedIn company link");
       input = { urls, limit: 30 };
       break;
+    case "linkedin-profiles":
+      if (!urls.length) throw new Error("Paste at least one public LinkedIn profile link");
+      input = {
+        profileScraperMode: "Profile details no email ($4 per 1k)",
+        urls,
+        queries: urls,
+      };
+      break;
+    case "linkedin-profile-posts":
+      if (!urls.length) throw new Error("Paste at least one public LinkedIn profile link");
+      input = {
+        targetUrls: urls,
+        maxPosts: Math.min(num(value, "maxPosts", 10), 40),
+        includeQuotePosts: true,
+        includeReposts: true,
+        scrapeReactions: false,
+        scrapeComments: false,
+      };
+      break;
+    case "linkedin-people": {
+      const titles = jobTitle ? [jobTitle] : [];
+      const places = location ? [location] : [];
+      const companyLooksUrl = /linkedin\.com\/company/i.test(company) || /^https?:\/\//i.test(company);
+      const companyUrls = company && companyLooksUrl ? [company.startsWith("http") ? company : `https://${company}`] : [];
+      const companyNames = company && !companyLooksUrl ? [company] : [];
+      if (!titles.length && !companyUrls.length && !companyNames.length && !places.length) {
+        throw new Error("Type a job title, a company, or a location");
+      }
+      input = {
+        profileScraperMode: "Short",
+        maxItems: Math.min(num(value, "maxItems", 25), 50),
+        takePages: 1,
+        ...(titles.length ? { currentJobTitles: titles } : {}),
+        ...(places.length ? { locations: places } : {}),
+        ...(companyUrls.length ? { currentCompanies: companyUrls } : {}),
+        ...(companyNames.length ? { searchQuery: companyNames[0] } : {}),
+      };
+      break;
+    }
     case "tiktok":
       if (!profiles.length && !hashtags.length) throw new Error("Add a username or a hashtag");
       input = { profiles, hashtags, resultsPerPage: 20 };
@@ -465,6 +611,94 @@ export function buildScrapeInput(toolId: string, value: FormData | Record<string
   return { actorId: tool.actorId, input };
 }
 
+function asText(value: unknown): string {
+  if (value == null) return "";
+  if (typeof value === "string" || typeof value === "number") return String(value).trim();
+  if (Array.isArray(value)) return value.map(asText).filter(Boolean).join(" · ");
+  if (typeof value === "object") {
+    const row = value as Record<string, unknown>;
+    return asText(
+      row.linkedinText ??
+        row.text ??
+        row.name ??
+        row.title ??
+        row.position ??
+        row.companyName ??
+        row.schoolName ??
+        row.school,
+    );
+  }
+  return "";
+}
+
+export function flattenScrapeItem(item: Record<string, unknown>): Record<string, unknown> {
+  const author = item.author && typeof item.author === "object" ? (item.author as Record<string, unknown>) : {};
+  const current = Array.isArray(item.currentPosition)
+    ? (item.currentPosition[0] as Record<string, unknown> | undefined)
+    : item.currentPosition && typeof item.currentPosition === "object"
+      ? (item.currentPosition as Record<string, unknown>)
+      : undefined;
+  const firstJob = Array.isArray(item.experience) ? (item.experience[0] as Record<string, unknown> | undefined) : undefined;
+  const name =
+    asText(item.fullName) ||
+    [item.firstName, item.lastName].map(asText).filter(Boolean).join(" ") ||
+    asText(author.name) ||
+    asText(item.name);
+  const url =
+    asText(item.linkedinUrl) ||
+    asText(item.profileUrl) ||
+    asText(item.url) ||
+    asText(item.link) ||
+    asText(author.linkedinUrl);
+  const location = asText(item.location) || asText((item.location as { linkedinText?: unknown } | undefined)?.linkedinText);
+  const company = asText(item.companyName) || asText(current?.companyName) || asText(firstJob?.companyName);
+  const role = asText(item.jobTitle) || asText(item.headline) || asText(firstJob?.position) || asText(current?.position);
+  const experience = Array.isArray(item.experience)
+    ? item.experience
+        .map((row) => {
+          const job = row as Record<string, unknown>;
+          return [asText(job.position), asText(job.companyName)].filter(Boolean).join(" @ ");
+        })
+        .filter(Boolean)
+        .join("; ")
+    : asText(item.experience);
+  const education = Array.isArray(item.education)
+    ? item.education
+        .map((row) => {
+          const school = row as Record<string, unknown>;
+          return [asText(school.schoolName ?? school.school), asText(school.degree)].filter(Boolean).join(" ");
+        })
+        .filter(Boolean)
+        .join("; ")
+    : asText(item.education);
+  const skills = Array.isArray(item.skills)
+    ? item.skills
+        .map((skill) => (typeof skill === "string" ? skill : asText((skill as Record<string, unknown>).name ?? (skill as Record<string, unknown>).title)))
+        .filter(Boolean)
+        .join(", ")
+    : asText(item.skills) || asText(item.topSkills);
+  return {
+    ...item,
+    name: name || item.name,
+    headline: asText(item.headline) || asText(author.info) || item.headline,
+    location: location || item.location,
+    company: company || item.company,
+    role: role || item.role,
+    experience: experience || item.experience,
+    education: education || item.education,
+    skills: skills || item.skills,
+    about: asText(item.about) || item.about,
+    followers: item.followerCount ?? item.followers ?? item.connectionsCount,
+    profileUrl: url || item.profileUrl,
+    url: url || item.url,
+    text: asText(item.content) || asText(item.text) || asText(item.about),
+  };
+}
+
+export function isLinkedInPeopleTool(id: string) {
+  return id.startsWith("linkedin");
+}
+
 function pickString(item: Record<string, unknown>, keys: string[]) {
   for (const key of keys) {
     const value = item[key];
@@ -478,11 +712,24 @@ function pickString(item: Record<string, unknown>, keys: string[]) {
 }
 
 export function scrapeItemToMention(tool: ScrapeTool, item: Record<string, unknown>, index: number): RawMention | null {
-  const url = pickString(item, ["url", "link", "postUrl", "inputUrl", "googleUrl", "reviewUrl", "adArchiveUrl", "website"]);
-  const title = pickString(item, ["title", "pageName", "name", "fullName", "text", "caption"]);
+  const flat = flattenScrapeItem(item);
+  const url = pickString(flat, [
+    "url",
+    "profileUrl",
+    "linkedinUrl",
+    "link",
+    "postUrl",
+    "inputUrl",
+    "googleUrl",
+    "reviewUrl",
+    "adArchiveUrl",
+    "website",
+  ]);
+  const title = pickString(flat, ["title", "name", "fullName", "headline", "pageName", "text", "caption"]);
   const content =
-    pickString(item, [
+    pickString(flat, [
       "text",
+      "about",
       "caption",
       "comment",
       "description",
@@ -492,18 +739,21 @@ export function scrapeItemToMention(tool: ScrapeTool, item: Record<string, unkno
       "reviewText",
       "body",
       "headline",
+      "experience",
     ]) || title;
   if (!url && !content) return null;
-  const author = pickString(item, ["authorName", "ownerUsername", "user", "username", "pageName", "author", "displayedName"]);
-  const date = pickString(item, ["date", "timestamp", "publishedAt", "time", "createdAt"]);
+  const author = pickString(flat, ["authorName", "name", "fullName", "ownerUsername", "user", "username", "pageName", "displayedName"]);
+  const postedAt = item.postedAt && typeof item.postedAt === "object" ? (item.postedAt as Record<string, unknown>) : {};
+  const date =
+    pickString(flat, ["date", "timestamp", "publishedAt", "time", "createdAt"]) || asText(postedAt.date) || asText(postedAt.timestamp);
   return {
     source: tool.source,
     externalId: String(item.id ?? item.postId ?? item.reviewId ?? url ?? `${tool.id}:${index}`).slice(0, 190),
     url: url || "https://example.invalid",
     title: title || tool.name,
     content: content.slice(0, 8000),
-    authorName: author || undefined,
-    authorHandle: pickString(item, ["username", "ownerUsername", "user"]) || undefined,
+    authorName: author || pickString(flat, ["name", "fullName"]) || undefined,
+    authorHandle: pickString(flat, ["username", "ownerUsername", "user", "publicIdentifier"]) || undefined,
     publishedAt: parsePublishedAt(date || undefined),
     kind: "scrape",
     raw: item,
@@ -512,11 +762,21 @@ export function scrapeItemToMention(tool: ScrapeTool, item: Record<string, unkno
 
 export function scrapeColumns(items: Record<string, unknown>[]) {
   const preferred = [
+    "name",
+    "headline",
+    "location",
+    "company",
+    "role",
+    "experience",
+    "education",
+    "skills",
+    "about",
+    "followers",
+    "profileUrl",
     "title",
     "text",
     "url",
     "link",
-    "name",
     "caption",
     "authorName",
     "username",
@@ -528,7 +788,7 @@ export function scrapeColumns(items: Record<string, unknown>[]) {
     "snippet",
   ];
   const keys = new Set<string>();
-  for (const item of items.slice(0, 20)) {
+  for (const item of items.slice(0, 20).map(flattenScrapeItem)) {
     Object.keys(item).forEach((key) => {
       if (typeof item[key] === "string" || typeof item[key] === "number") keys.add(key);
     });
@@ -541,6 +801,12 @@ export function scrapeColumns(items: Record<string, unknown>[]) {
 export function itemsToCsv(items: Record<string, unknown>[]) {
   const columns = scrapeColumns(items);
   const escape = (value: unknown) => `"${String(value ?? "").replace(/"/g, '""')}"`;
-  const lines = [columns.join(","), ...items.map((item) => columns.map((column) => escape(item[column])).join(","))];
+  const lines = [
+    columns.join(","),
+    ...items.map((item) => {
+      const flat = flattenScrapeItem(item);
+      return columns.map((column) => escape(flat[column])).join(",");
+    }),
+  ];
   return `\uFEFF${lines.join("\n")}`;
 }

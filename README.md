@@ -120,6 +120,8 @@ Each brand has a guided profile (positive/negative phrases, official accounts, c
 
 Set `APIFY_TOKEN` from [console.apify.com](https://console.apify.com). Optional `APIFY_MONTHLY_LIMIT_USD` (default 25) is also editable in the Scraper tab. Runs go through the worker queue. Export CSV/Excel, save rows to Mentions, or save as a list. Scheduled re-runs clone a new history row.
 
+LinkedIn people tools (no cookies): `harvestapi/linkedin-profile-scraper` (profiles, about $4 / 1,000), `harvestapi/linkedin-profile-posts` (posts, about $1.50 / 1,000), `harvestapi/linkedin-profile-search` (find people, about $0.10 per search page). Collect public data only and follow LinkedIn’s terms.
+
 ### Instagram hashtag quota
 
 Meta allows **30 unique hashtags per rolling 7 days per Instagram account**. Reusing a hashtag already counted in the window does not consume quota. Spotted records each new hashtag, skips extras, and surfaces remaining quota on Connected platforms and as a brand warning.

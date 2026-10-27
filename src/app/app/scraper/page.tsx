@@ -5,7 +5,7 @@ import { listBrands } from "@/lib/workspace";
 import { saveApifyLimitAction, startScrapeAction } from "@/lib/actions";
 import { scrapeBudget } from "@/lib/jobs/scraper";
 import { hasApifyToken, missingTokenMessage } from "@/lib/scrape/apify";
-import { SCRAPE_TOOLS, scrapeTool } from "@/lib/scrape/tools";
+import { isLinkedInPeopleTool, SCRAPE_TOOLS, scrapeTool } from "@/lib/scrape/tools";
 import { Button, Card, EmptyState, Field, PageHeader } from "@/components/ui";
 
 export default async function ScraperPage({
@@ -39,8 +39,8 @@ export default async function ScraperPage({
         title={ar ? "المكشط" : "Scraper"}
         description={
           ar
-            ? "أدوات جاهزة لنسخ الصفحات العامة والقوائم. أنت مسؤول عن اتباع شروط كل موقع. لا نحفظ كوكيز أو كلمات مرور."
-            : "Ready-made tools that copy public pages and lists. You are responsible for following each site’s terms. We never store cookies or logins."
+            ? "أدوات جاهزة لنسخ الصفحات العامة والقوائم. أنت مسؤول عن اتباع شروط كل موقع وقوانين الخصوصية. لا نحفظ كوكيز أو كلمات مرور. لينكدإن: اجمع البيانات العامة فقط."
+            : "Ready-made tools that copy public pages and lists. You are responsible for following each site’s terms and privacy laws. We never store cookies or logins. LinkedIn: collect public data only."
         }
       />
       {!hasApifyToken() ? (
@@ -87,6 +87,13 @@ export default async function ScraperPage({
       <Card>
         <h2 className="font-semibold">{ar ? tool.nameAr : tool.name}</h2>
         <p className="mt-1 text-sm text-muted">{ar ? tool.helperAr : tool.helper}</p>
+        {isLinkedInPeopleTool(tool.id) ? (
+          <p className="mt-2 text-sm text-warn">
+            {ar
+              ? "اجمع البيانات العامة فقط. التزم بشروط لينكدإن وقوانين الخصوصية في بلدك. لا نطلب كوكيز أو كلمة مرور."
+              : "Collect public data only. Follow LinkedIn’s terms and the privacy laws where you work. We never ask for cookies or a password."}
+          </p>
+        ) : null}
         <p className="mt-2 text-sm">
           {ar ? `التكلفة التقديرية قبل التشغيل: $${tool.estimateUsd.toFixed(2)}` : `Estimated cost before you run: $${tool.estimateUsd.toFixed(2)}`}
         </p>

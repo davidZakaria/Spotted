@@ -4,7 +4,7 @@ import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { listBrands } from "@/lib/workspace";
 import { saveScrapeListAction, saveScrapeToMentionsAction } from "@/lib/actions";
-import { scrapeColumns, scrapeTool } from "@/lib/scrape/tools";
+import { flattenScrapeItem, scrapeColumns, scrapeTool } from "@/lib/scrape/tools";
 import { Button, Card, Field, PageHeader } from "@/components/ui";
 
 export default async function ScrapeRunPage({ params }: { params: Promise<{ id: string }> }) {
@@ -18,7 +18,7 @@ export default async function ScrapeRunPage({ params }: { params: Promise<{ id: 
   ]);
   if (!run) notFound();
   const tool = scrapeTool(run.toolId);
-  const items = Array.isArray(run.items) ? (run.items as Record<string, unknown>[]) : [];
+  const items = Array.isArray(run.items) ? (run.items as Record<string, unknown>[]).map(flattenScrapeItem) : [];
   const columns = scrapeColumns(items);
   const csvHref = `/api/scraper/runs/${run.id}/export?format=csv`;
   const xlsHref = `/api/scraper/runs/${run.id}/export?format=xls`;
