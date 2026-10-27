@@ -2,9 +2,18 @@ import { Queue, Worker, type Job } from "bullmq";
 import { ingestAllActive, ingestProject } from "./jobs/ingest";
 import { evaluateAlerts, sendDigests } from "./jobs/alerts";
 import { publishDuePosts, syncInbox } from "./jobs/publish";
+import { executeScrapeRun, runDueScrapes } from "./jobs/scraper";
 import { getRedis } from "./redis";
 
-export type JobName = "ingest-project" | "ingest-all" | "evaluate-alerts" | "publish-due" | "send-digests" | "sync-inbox";
+export type JobName =
+  | "ingest-project"
+  | "ingest-all"
+  | "evaluate-alerts"
+  | "publish-due"
+  | "send-digests"
+  | "sync-inbox"
+  | "run-scraper"
+  | "scraper-due";
 
 let queue: Queue | null = null;
 
@@ -43,6 +52,10 @@ export async function runJob(name: JobName, data: Record<string, string> = {}) {
       return sendDigests();
     case "sync-inbox":
       return syncInbox(data.workspaceId || undefined);
+    case "run-scraper":
+      return executeScrapeRun(data.runId);
+    case "scraper-due":
+      return runDueScrapes();
     default:
       return null;
   }
@@ -63,4 +76,5 @@ export async function scheduleRepeats() {
   await q.add("publish-due", {}, { repeat: { every: 60 * 1000 }, jobId: "repeat-publish" });
   await q.add("send-digests", {}, { repeat: { every: 24 * 60 * 60 * 1000 }, jobId: "repeat-digest" });
   await q.add("sync-inbox", {}, { repeat: { every: 5 * 60 * 1000 }, jobId: "repeat-inbox" });
+  await q.add("scraper-due", {}, { repeat: { every: 15 * 60 * 1000 }, jobId: "repeat-scraper" });
 }

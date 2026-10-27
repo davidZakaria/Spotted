@@ -9,6 +9,7 @@ import {
   MessageSquareText,
   Settings,
   FileText,
+  Radar,
 } from "lucide-react";
 import type { SessionUser } from "@/lib/auth";
 import { t as tr } from "@/lib/i18n";
@@ -26,6 +27,7 @@ const links = [
   { href: "/app/publish", key: "publish" as const, icon: CalendarDays },
   { href: "/app/inbox", key: "inbox" as const, icon: Inbox },
   { href: "/app/reports", key: "reports" as const, icon: FileText },
+  { href: "/app/scraper", key: "scraper" as const, icon: Radar },
   { href: "/app/settings", key: "settings" as const, icon: Settings },
 ];
 
@@ -89,8 +91,8 @@ export function Shell({
         <div className="hidden border-t border-line px-8 py-4 md:block">
           <SiteFooter compact />
         </div>
-        <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-line bg-bg-elev/95 px-1 py-1 text-[11px] md:hidden">
-          {links.slice(0, 5).map((l) => (
+        <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-6 border-t border-line bg-bg-elev/95 px-1 py-1 text-[11px] md:hidden">
+          {links.slice(0, 6).map((l) => (
             <Link key={l.href} href={l.href} className="flex flex-col items-center gap-1 rounded-lg px-1 py-2 text-muted">
               <l.icon className="h-4 w-4" />
               {tr(locale, l.key)}

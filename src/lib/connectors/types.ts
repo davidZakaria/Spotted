@@ -43,12 +43,22 @@ export type ProjectConfig = {
   playStoreIds?: string[];
   competitors?: string[];
   languages?: string[];
+  countries?: string[];
   webSearchProvider?: "brave" | "serpapi";
   podcastQueries?: string[];
   backfilledAt?: string;
   excludeWords?: string[];
   googleMapsPlaces?: GoogleMapsPlace[];
   googleMapsIntervalHours?: number;
+  positiveWords?: string[];
+  negativeWords?: string[];
+  officialAccounts?: { label: string; handle?: string; url?: string }[];
+  websites?: string[];
+  hideOwnPosts?: boolean;
+  competitorAccounts?: { label: string; handle?: string; url?: string }[];
+  spokespeople?: string[];
+  products?: string[];
+  hashtags?: string[];
 };
 
 export type GoogleMapsPlace = {

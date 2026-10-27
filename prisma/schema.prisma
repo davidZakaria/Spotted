@@ -143,24 +143,27 @@ model Session {
 }
 
 model Workspace {
-  id          String          @id @default(cuid())
-  name        String
-  slug        String          @unique
-  timezone    String          @default("UTC")
-  onboardedAt DateTime?
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
-  members     Membership[]
-  projects    Project[]
-  accounts    SocialAccount[]
-  posts       ScheduledPost[]
-  inboxItems  InboxItem[]
-  reports     Report[]
-  digests     Digest[]
-  budgets     ConnectorBudget[]
-  usage       ApiUsage[]
-  invites     Invite[]
-  auditLogs   AuditLog[]
+  id                    String          @id @default(cuid())
+  name                  String
+  slug                  String          @unique
+  timezone              String          @default("UTC")
+  onboardedAt           DateTime?
+  apifyMonthlyLimitUsd  Float           @default(25)
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+  members               Membership[]
+  projects              Project[]
+  accounts              SocialAccount[]
+  posts                 ScheduledPost[]
+  inboxItems            InboxItem[]
+  reports               Report[]
+  digests               Digest[]
+  budgets               ConnectorBudget[]
+  usage                 ApiUsage[]
+  invites               Invite[]
+  auditLogs             AuditLog[]
+  scrapeRuns            ScrapeRun[]
+  scrapeLists           ScrapeList[]
 }
 
 model Membership {
@@ -192,6 +195,7 @@ model Project {
   digests     Digest[]
   entities    TrackedEntity[]
   warnings    ConnectorWarning[]
+  scrapeRuns  ScrapeRun[]
 
   @@index([workspaceId])
 }
@@ -473,6 +477,55 @@ model AuditLog {
   @@index([workspaceId, createdAt])
   @@index([userId, createdAt])
   @@index([action, createdAt])
+}
+
+enum ScrapeStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+model ScrapeRun {
+  id               String       @id @default(cuid())
+  workspaceId      String
+  projectId        String?
+  createdById      String?
+  toolId           String
+  actorId          String
+  title            String
+  input            Json
+  status           ScrapeStatus @default(QUEUED)
+  error            String?
+  apifyRunId       String?
+  itemCount        Int          @default(0)
+  estimatedCostUsd Float        @default(0)
+  chargedUsd       Float?
+  items            Json         @default("[]")
+  scheduleHours    Int?
+  nextRunAt        DateTime?
+  createdAt        DateTime     @default(now())
+  startedAt        DateTime?
+  finishedAt       DateTime?
+  workspace        Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project          Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, createdAt])
+  @@index([workspaceId, nextRunAt])
+  @@index([status])
+}
+
+model ScrapeList {
+  id          String    @id @default(cuid())
+  workspaceId String
+  name        String
+  toolId      String
+  items       Json
+  createdAt   DateTime  @default(now())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, createdAt])
 }
 
 model OauthNonce {

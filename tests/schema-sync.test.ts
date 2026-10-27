@@ -42,6 +42,15 @@ describe("prisma schema and migrations", () => {
     );
   });
 
+  it("adds ScrapeRun, ScrapeList, and Workspace.apifyMonthlyLimitUsd", () => {
+    const schema = readFileSync("prisma/schema.prisma", "utf8");
+    expect(schema).toMatch(/model ScrapeRun/);
+    expect(schema).toMatch(/model ScrapeList/);
+    expect(schema).toMatch(/apifyMonthlyLimitUsd/);
+    expect(migrationSql()).toMatch(/CREATE TABLE IF NOT EXISTS "ScrapeRun"/);
+    expect(migrationSql()).toMatch(/ADD COLUMN IF NOT EXISTS "apifyMonthlyLimitUsd"/);
+  });
+
   it("adds Workspace.onboardedAt with idempotent SQL", () => {
     const schema = readFileSync("prisma/schema.prisma", "utf8");
     expect(schema).toMatch(/model Workspace[\s\S]*onboardedAt\s+DateTime\?/);

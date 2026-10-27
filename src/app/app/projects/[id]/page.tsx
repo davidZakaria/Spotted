@@ -10,7 +10,9 @@ import { VolumeChart } from "@/components/charts";
 import { formatNumber } from "@/lib/utils";
 import { t } from "@/lib/i18n";
 import { BrandListenSettings } from "@/components/brand-listen-settings";
+import { BrandHealthCard, BrandProfileWizard } from "@/components/brand-profile";
 import type { ProjectConfig } from "@/lib/connectors/types";
+import { brandHealth, mentionRoles, readBrandProfile } from "@/lib/listen/profile";
 
 export default async function ProjectOverview({ params }: { params: Promise<{ id: string }> }) {
   const session = await requireSession();
@@ -22,6 +24,8 @@ export default async function ProjectOverview({ params }: { params: Promise<{ id
   });
   if (!project) notFound();
   const config = (project.config ?? {}) as ProjectConfig;
+  const profile = readBrandProfile(config);
+  const health = brandHealth(profile, project.keywords.length);
   const stats = await projectAnalytics(project.id, 7);
   const mentions = await prisma.mention.findMany({
     where: { projectId: project.id },
@@ -79,6 +83,13 @@ export default async function ProjectOverview({ params }: { params: Promise<{ id
       >
         <VolumeChart data={stats.series} />
       </ChartBlock>
+      <BrandHealthCard locale={locale} score={health.score} items={health.items} />
+      <BrandProfileWizard
+        projectId={project.id}
+        locale={locale}
+        profile={profile}
+        keywords={project.keywords}
+      />
       <BrandListenSettings
         projectId={project.id}
         locale={locale}
@@ -120,7 +131,11 @@ export default async function ProjectOverview({ params }: { params: Promise<{ id
       <div className="space-y-3">
         <h2 className="font-semibold">{locale === "ar" ? "آخر الإشارات" : "Latest mentions"}</h2>
         {mentions.map((mention) => (
-          <MentionCard key={mention.id} mention={mention} locale={locale} />
+          <MentionCard
+            key={mention.id}
+            mention={{ ...mention, roles: mentionRoles(mention, profile) }}
+            locale={locale}
+          />
         ))}
       </div>
     </div>

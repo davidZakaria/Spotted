@@ -61,6 +61,8 @@ npm test
 4. Connected platforms shows what works now versus what needs a login, with step-by-step help.
 5. Switch English / العربية. Dark and light themes. Arabic mention text renders right-to-left.
 6. Schedule a post (a practice account is used until you connect a real one) and export a spreadsheet or PDF.
+7. Open a brand and complete **Brand profile**: mood words, official accounts, competitors, people, products, languages, and ignore words. Mentions can filter Own post / competitor / person / product.
+8. **Scraper** runs ready-made Apify tools (web, Google, Facebook, Instagram, LinkedIn, TikTok, YouTube, X, Maps, Ads Library). Set `APIFY_TOKEN`. You are responsible for each site’s terms. We never store cookies or logins.
 
 Public pages (no login; Meta’s crawler can read them): `/privacy`, `/terms`, and `/data-deletion`. Linked in the footer. Data-deletion requests go to `davidsamii97@gmail.com`.
 
@@ -109,6 +111,14 @@ Set `SERPAPI_API_KEY` to search Google web and Google News (engines `google` and
 ### X usage budgets
 
 X is pay-per-use. Each call is recorded (`ApiUsage`) with an estimated USD cost (default $0.005, editable). Settings → Connected platforms lets you set daily searches, monthly searches, and a monthly spend cap. When a cap is hit, X listening stops and a brand warning is stored instead of running up the bill.
+
+### Brand profile and mood words
+
+Each brand has a guided profile (positive/negative phrases, official accounts, competitors, people, products, hashtags, languages, countries, sources, ignore words). User-negative words force **Negative** and **Complaints & risk**. User-positive words push the score up. `npm run sentiment:rescore` (or `docker compose exec spotted-web npm run sentiment:rescore`) applies the new lists to saved mentions. Extra product/hashtag/people names are packed into the existing SerpAPI query — they do not add searches.
+
+### Scraper (Apify)
+
+Set `APIFY_TOKEN` from [console.apify.com](https://console.apify.com). Optional `APIFY_MONTHLY_LIMIT_USD` (default 25) is also editable in the Scraper tab. Runs go through the worker queue. Export CSV/Excel, save rows to Mentions, or save as a list. Scheduled re-runs clone a new history row.
 
 ### Instagram hashtag quota
 

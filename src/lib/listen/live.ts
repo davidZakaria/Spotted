@@ -13,6 +13,8 @@ import { isValidDate, parsePublishedAt, safeIso } from "./dates";
 import { tokenOf } from "@/lib/crypto";
 import { appendSerpExcludes, selectSerpSynonyms, sourceUsesPackedSerpQuery } from "./synonyms";
 import { applyReviewSentiment } from "./maps";
+import { profileSerpExtras, readBrandProfile, sentimentLexicon } from "./profile";
+import type { SentimentLexicon } from "@/lib/sentiment";
 
 export type LiveHit = {
   source: Source;
@@ -55,8 +57,12 @@ export async function searchOneSource(input: {
   const connector = getConnector(input.source);
   if (!connector) return [];
   const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const extras = profileSerpExtras(readBrandProfile(input.config));
   const serpQuery = appendSerpExcludes(
-    selectSerpSynonyms(input.rule, { rotateLeftovers: false }).query,
+    selectSerpSynonyms(
+      { ...input.rule, synonyms: [...(input.rule.synonyms ?? []), ...extras] },
+      { rotateLeftovers: false },
+    ).query,
     [...(input.rule.excludedWords ?? []), ...(input.config.excludeWords ?? [])],
   );
   const queries = sourceUsesPackedSerpQuery(input.source)
@@ -92,9 +98,9 @@ export async function searchOneSource(input: {
   );
 }
 
-export async function toLiveHit(mention: RawMention): Promise<LiveHit> {
+export async function toLiveHit(mention: RawMention, lexicon?: SentimentLexicon): Promise<LiveHit> {
   const text = mentionSearchText(mention);
-  const sentiment = applyReviewSentiment(await analyzeSentiment(text), mention.rating);
+  const sentiment = applyReviewSentiment(await analyzeSentiment(text, lexicon), mention.rating);
   const language = detectLanguage(text);
   return {
     source: mention.source,
@@ -125,6 +131,7 @@ export async function runLiveSearch(input: {
   keywordId?: string;
   onProgress?: (event: { type: "plan" | "source" | "hits" | "done"; plan?: LiveSourceStatus[]; progress?: LiveProgress; hits?: LiveHit[]; total?: number }) => Promise<void> | void;
 }) {
+  const lexicon = sentimentLexicon(readBrandProfile(input.config));
   const serp = await serpUsageSummary(input.workspaceId);
   const plan = liveSourcePlan({
     connected: input.connected.filter((account) => !account.isMock).map((account) => account.platform),
@@ -174,7 +181,7 @@ export async function runLiveSearch(input: {
       for (const mention of unique) {
         try {
           mention.publishedAt = parsePublishedAt(mention.publishedAt);
-          hits.push(await toLiveHit(mention));
+          hits.push(await toLiveHit(mention, lexicon));
         } catch {
           // one bad mention must not fail the source
         }

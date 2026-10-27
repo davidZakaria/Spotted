@@ -9,6 +9,11 @@ export type SentimentResult = {
   complaint: boolean;
 };
 
+export type SentimentLexicon = {
+  positive?: string[];
+  negative?: string[];
+};
+
 type LexTerm = {
   term: string;
   weight: number;
@@ -172,6 +177,19 @@ function compileTerms(): LexTerm[] {
 const TERMS = compileTerms();
 const NEGATION_NORM = NEGATION.map(normalizeText).filter(Boolean).sort((a, b) => b.length - a.length);
 
+function extraTerms(extras?: SentimentLexicon): LexTerm[] {
+  const out: LexTerm[] = [];
+  for (const term of extras?.negative ?? []) {
+    const normalized = normalizeText(term);
+    if (normalized) out.push({ term: normalized, weight: 3, polarity: -1, risk: true });
+  }
+  for (const term of extras?.positive ?? []) {
+    const normalized = normalizeText(term);
+    if (normalized) out.push({ term: normalized, weight: 2, polarity: 1 });
+  }
+  return out.sort((a, b) => b.term.length - a.term.length);
+}
+
 function isNegated(hay: string, start: number) {
   const window = hay.slice(Math.max(0, start - 24), start);
   return NEGATION_NORM.some((neg) => {
@@ -201,12 +219,15 @@ function isEndBounded(hay: string, end: number, latin: boolean) {
   return !LETTER.test(hay[end] ?? "");
 }
 
-export function scoreSentiment(text: string) {
+export function scoreSentiment(text: string, extras?: SentimentLexicon) {
   const hay = normalizeText(text);
   let score = 0;
   let complaint = false;
+  let forcedNegative = false;
   const used: [number, number][] = [];
-  for (const item of TERMS) {
+  const custom = extraTerms(extras);
+  const userNeg = new Set(custom.filter((item) => item.polarity === -1).map((item) => item.term));
+  for (const item of [...custom, ...TERMS]) {
     let from = 0;
     let hits = 0;
     while (hits < 8) {
@@ -226,9 +247,14 @@ export function scoreSentiment(text: string) {
       }
       score += item.polarity * item.weight;
       if (item.risk) complaint = true;
+      if (item.polarity === -1 && userNeg.has(item.term)) forcedNegative = true;
     }
   }
-  return { score, complaint };
+  if (forcedNegative) {
+    complaint = true;
+    score = Math.min(score, -3);
+  }
+  return { score, complaint, forcedNegative };
 }
 
 export function classifyScore(score: number): { sentiment: Sentiment; sentimentScore: number } {
@@ -237,14 +263,16 @@ export function classifyScore(score: number): { sentiment: Sentiment; sentimentS
   return { sentiment: "NEUTRAL", sentimentScore: 0 };
 }
 
-export function isComplaintRisk(text: string) {
-  return scoreSentiment(text).complaint;
+export function isComplaintRisk(text: string, extras?: SentimentLexicon) {
+  return scoreSentiment(text, extras).complaint;
 }
 
-export function analyzeSentimentLocal(text: string): SentimentResult {
-  const { score, complaint } = scoreSentiment(text);
-  const classified = classifyScore(score);
-  return { ...classified, complaint };
+export function analyzeSentimentLocal(text: string, extras?: SentimentLexicon): SentimentResult {
+  const { score, complaint, forcedNegative } = scoreSentiment(text, extras);
+  const classified = forcedNegative
+    ? { sentiment: "NEGATIVE" as const, sentimentScore: Math.min(-0.6, classifyScore(score).sentimentScore) }
+    : classifyScore(score);
+  return { ...classified, complaint: complaint || forcedNegative };
 }
 
 async function classifyOpenAI(text: string): Promise<Omit<SentimentResult, "complaint"> | null> {
@@ -281,8 +309,8 @@ async function classifyOpenAI(text: string): Promise<Omit<SentimentResult, "comp
   };
 }
 
-export async function analyzeSentiment(text: string): Promise<SentimentResult> {
-  const local = analyzeSentimentLocal(text);
+export async function analyzeSentiment(text: string, extras?: SentimentLexicon): Promise<SentimentResult> {
+  const local = analyzeSentimentLocal(text, extras);
   if (appConfig.openaiKey) {
     try {
       const remote = await classifyOpenAI(text);

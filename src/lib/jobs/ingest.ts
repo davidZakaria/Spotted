@@ -28,6 +28,7 @@ import {
 } from "../listen/synonyms";
 import { applyReviewSentiment, fetchMapsReviews, mapsIntervalHours } from "../listen/maps";
 import type { GoogleMapsPlace } from "../connectors/types";
+import { profileSerpExtras, readBrandProfile, sentimentLexicon } from "../listen/profile";
 
 export function mergeConnectedSources(
   sources: Source[],
@@ -75,6 +76,8 @@ export async function persistMentions(
 ) {
   const unique = dedupeMentions(rows.map((row) => row.mention));
   const byKey = new Map(unique.map((mention) => [`${mention.source}:${mention.externalId}`, mention]));
+  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { config: true } });
+  const lexicon = sentimentLexicon(readBrandProfile((project?.config ?? {}) as ProjectConfig));
   let upserted = 0;
   for (const row of rows) {
     const mention = byKey.get(`${row.mention.source}:${row.mention.externalId}`);
@@ -82,7 +85,7 @@ export async function persistMentions(
     byKey.delete(`${row.mention.source}:${row.mention.externalId}`);
     const searchText = mentionSearchText(mention);
     const lang = detectLanguage(searchText);
-    const sentiment = applyReviewSentiment(await analyzeSentiment(searchText), mention.rating);
+    const sentiment = applyReviewSentiment(await analyzeSentiment(searchText, lexicon), mention.rating);
     try {
       await prisma.mention.upsert({
         where: {
@@ -322,15 +325,17 @@ export async function ingestProject(
   const collected: { mention: RawMention; keywordId?: string }[] = [];
   const regularSince = lookbackSince(INGEST_DAYS);
   const backfillSince = lookbackSince(BACKFILL_DAYS);
+  const profileExtras = profileSerpExtras(readBrandProfile(config));
   const keywordRules: KeywordRow[] = project.keywords.length
     ? project.keywords.map((keyword) => {
         const rule = ruleFromKeyword(keyword);
+        const packed = { ...rule, synonyms: [...(rule.synonyms ?? []), ...profileExtras] };
         return {
           keyword,
           rule,
           queries: searchQueries(rule, FREE_SPLIT_QUERY_CAP),
           serpQuery: appendSerpExcludes(
-            selectSerpSynonyms(rule, {
+            selectSerpSynonyms(packed, {
               rotation: synonymRotationSlot(keyword.id),
               rotateLeftovers: true,
               preferArabic: wantsArabicCoverage(rule, {
@@ -348,7 +353,10 @@ export async function ingestProject(
           rule: ruleFromPhrase(project.name),
           queries: searchQueries(ruleFromPhrase(project.name), FREE_SPLIT_QUERY_CAP),
           serpQuery: appendSerpExcludes(
-            selectSerpSynonyms(ruleFromPhrase(project.name)).query,
+            selectSerpSynonyms({
+              ...ruleFromPhrase(project.name),
+              synonyms: profileExtras,
+            }).query,
             config.excludeWords,
           ),
         },

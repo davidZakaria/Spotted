@@ -4,11 +4,18 @@ import { Badge, SentimentPill } from "@/components/ui";
 import { t } from "@/lib/i18n";
 import { truncate } from "@/lib/utils";
 import { HISTORY_SCAN_KIND, HISTORY_SCAN_LABEL, HISTORY_SCAN_LABEL_AR } from "@/lib/listen/backfill";
+import { roleLabel } from "@/lib/listen/profile";
 
 type MentionLike = Pick<
   Mention,
   "id" | "url" | "title" | "content" | "authorName" | "authorHandle" | "source" | "sentiment" | "publishedAt" | "language"
-> & { project?: { name: string }; kind?: string | null; complaint?: boolean | null; rating?: number | null };
+> & {
+  project?: { name: string };
+  kind?: string | null;
+  complaint?: boolean | null;
+  rating?: number | null;
+  roles?: Array<"own" | "competitor" | "person" | "product">;
+};
 
 export function MentionCard({
   mention,
@@ -54,6 +61,11 @@ export function MentionCard({
               <span>· {when}</span>
             </div>
             <span className="flex flex-wrap items-center gap-1.5">
+              {(mention.roles ?? []).map((role) => (
+                <Badge key={role} tone={role === "own" ? "accent" : role === "competitor" ? "warn" : "muted"}>
+                  {roleLabel(role, locale)}
+                </Badge>
+              ))}
               {mention.rating != null ? (
                 <Badge tone={mention.rating <= 2 ? "bad" : mention.rating >= 4 ? "good" : "muted"}>
                   {mention.rating}★

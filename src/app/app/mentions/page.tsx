@@ -16,6 +16,8 @@ import { influenceScore } from "@/lib/listen/dedupe";
 import { serpUsageSummary } from "@/lib/listen/serpapi";
 import { formatNumber } from "@/lib/utils";
 import type { Sentiment, Source } from "@prisma/client";
+import type { ProjectConfig } from "@/lib/connectors/types";
+import { mentionRoles, readBrandProfile } from "@/lib/listen/profile";
 
 export default async function MentionsPage({
   searchParams,
@@ -31,6 +33,7 @@ export default async function MentionsPage({
     influence?: string;
     keyword?: string;
     risk?: string;
+    who?: string;
   }>;
 }) {
   const session = await requireSession();
@@ -73,7 +76,18 @@ export default async function MentionsPage({
     orderBy: { publishedAt: "desc" },
     take: 120,
   });
-  const mentions = stored.filter((mention) => influenceScore(mention) >= minInfluence);
+  const profile = readBrandProfile((brand.config ?? {}) as ProjectConfig);
+  const who = sp.who || (profile.hideOwnPosts ? "others" : "");
+  const mentions = stored.filter((mention) => {
+    if (influenceScore(mention) < minInfluence) return false;
+    const roles = mentionRoles(mention, profile);
+    if (who === "others" && roles.includes("own")) return false;
+    if (who === "own") return roles.includes("own");
+    if (who === "competitor") return roles.includes("competitor");
+    if (who === "person") return roles.includes("person");
+    if (who === "product") return roles.includes("product");
+    return true;
+  });
   const languages = [...new Set(stored.map((mention) => mention.language).filter(Boolean))] as string[];
 
   return (
@@ -97,6 +111,11 @@ export default async function MentionsPage({
         }
       />
       <BrandSwitcher brands={brands} currentId={brand.id} path="/app/mentions" label={t(locale, "brands")} />
+      <p className="text-sm">
+        <Link href={`/app/projects/${brand.id}`} className="text-accent">
+          {locale === "ar" ? "ملف العلامة وإعداد المراقبة" : "Brand profile and listening setup"}
+        </Link>
+      </p>
 
       <LiveSearch
         projectId={brand.id}
@@ -220,6 +239,14 @@ export default async function MentionsPage({
           <option value="50">{locale === "ar" ? "تأثير 50+" : "Influence 50+"}</option>
           <option value="200">{locale === "ar" ? "تأثير 200+" : "Influence 200+"}</option>
         </select>
+        <select name="who" defaultValue={who}>
+          <option value="">{locale === "ar" ? "الكل" : "Everyone"}</option>
+          <option value="others">{locale === "ar" ? "الآخرون فقط" : "Others only"}</option>
+          <option value="own">{locale === "ar" ? "منشورنا" : "Own posts"}</option>
+          <option value="competitor">{locale === "ar" ? "منافس" : "Competitor"}</option>
+          <option value="person">{locale === "ar" ? "شخص" : "Person"}</option>
+          <option value="product">{locale === "ar" ? "منتج" : "Product"}</option>
+        </select>
         <select name="keyword" defaultValue={sp.keyword ?? ""}>
           <option value="">{locale === "ar" ? "كل الكلمات" : "All watched words"}</option>
           {brand.keywords.map((keyword) => (
@@ -254,7 +281,11 @@ export default async function MentionsPage({
             }
           />
         ) : mentions.map((mention) => (
-          <MentionCard key={mention.id} mention={mention} locale={locale} />
+          <MentionCard
+            key={mention.id}
+            mention={{ ...mention, roles: mentionRoles(mention, profile) }}
+            locale={locale}
+          />
         ))}
       </div>
     </div>

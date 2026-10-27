@@ -31,6 +31,10 @@ import { evaluateAlerts } from "./jobs/alerts";
 import { csvWords } from "./listen/query";
 import { mapsIntervalHours, resolveMapsPlace } from "./listen/maps";
 import type { GoogleMapsPlace, ProjectConfig } from "./connectors/types";
+import { parseAccounts } from "./listen/profile";
+import { buildScrapeInput, scrapeTool } from "./scrape/tools";
+import { hasApifyToken, missingTokenMessage } from "./scrape/apify";
+import { executeScrapeRun, saveScrapeToMentions, scrapeBudget } from "./jobs/scraper";
 
 export async function createProjectAction(formData: FormData) {
   const session = await requireSession();
@@ -597,4 +601,123 @@ export async function disableTotpAction(formData: FormData) {
     ...(await requestMeta()),
   });
   revalidatePath("/app/settings/security");
+}
+
+export async function saveBrandProfileAction(formData: FormData) {
+  const session = await requireSession();
+  if (!canEdit(session.role)) throw new Error("You need editor access");
+  const projectId = String(formData.get("projectId") ?? "");
+  await projectInWorkspace(session.workspaceId, projectId);
+  const { project, config } = await loadProjectConfig(session.workspaceId, projectId);
+  const sources = formData
+    .getAll("sources")
+    .map(String)
+    .filter((s): s is Source => Object.values(Source).includes(s as Source));
+  const next: ProjectConfig = {
+    ...config,
+    positiveWords: csvWords(String(formData.get("positiveWords") ?? "")),
+    negativeWords: csvWords(String(formData.get("negativeWords") ?? "")),
+    officialAccounts: parseAccounts(String(formData.get("officialAccounts") ?? "")),
+    websites: csvWords(String(formData.get("websites") ?? "")),
+    hideOwnPosts: formData.get("hideOwnPosts") === "on",
+    competitors: csvWords(String(formData.get("competitors") ?? "")),
+    competitorAccounts: parseAccounts(String(formData.get("competitorAccounts") ?? "")),
+    spokespeople: csvWords(String(formData.get("spokespeople") ?? "")),
+    products: csvWords(String(formData.get("products") ?? "")),
+    hashtags: csvWords(String(formData.get("hashtags") ?? "")),
+    languages: csvWords(String(formData.get("languages") ?? "")),
+    countries: csvWords(String(formData.get("countries") ?? "")),
+    excludeWords: csvWords(String(formData.get("excludeWords") ?? "")),
+    sources: sources.length ? sources : config.sources,
+  };
+  await prisma.project.update({ where: { id: project.id }, data: { config: next } });
+  revalidatePath(`/app/projects/${projectId}`);
+  revalidatePath("/app/mentions");
+}
+
+export async function startScrapeAction(formData: FormData) {
+  const session = await requireSession();
+  if (!canEdit(session.role)) throw new Error("You need editor access");
+  if (!hasApifyToken()) throw new Error(missingTokenMessage(session.locale === "ar" ? "ar" : "en"));
+  const toolId = String(formData.get("toolId") ?? "");
+  const tool = scrapeTool(toolId);
+  if (!tool) throw new Error("Pick a scraper tool");
+  const built = buildScrapeInput(toolId, formData);
+  const projectId = String(formData.get("projectId") ?? "") || null;
+  if (projectId) await projectInWorkspace(session.workspaceId, projectId);
+  const hours = Number(formData.get("scheduleHours") ?? 0);
+  const budget = await scrapeBudget(session.workspaceId);
+  if (budget.remaining < tool.estimateUsd) {
+    throw new Error(
+      session.locale === "ar"
+        ? `وصلت لحد الصرف الشهري للمكشط ($${budget.used.toFixed(2)} من $${budget.limit}).`
+        : `Monthly scraper spend limit reached ($${budget.used.toFixed(2)} of $${budget.limit}).`,
+    );
+  }
+  const title =
+    String(formData.get("title") ?? "").trim() ||
+    `${tool.name} · ${new Date().toLocaleString(session.locale === "ar" ? "ar" : "en")}`;
+  const run = await prisma.scrapeRun.create({
+    data: {
+      workspaceId: session.workspaceId,
+      projectId,
+      createdById: session.id,
+      toolId: tool.id,
+      actorId: built.actorId,
+      title,
+      input: built.input,
+      estimatedCostUsd: tool.estimateUsd,
+      scheduleHours: Number.isFinite(hours) && hours > 0 ? Math.min(Math.floor(hours), 168) : null,
+      nextRunAt: Number.isFinite(hours) && hours > 0 ? new Date(Date.now() + hours * 60 * 60 * 1000) : null,
+      status: "QUEUED",
+    },
+  });
+  const queued = await enqueue("run-scraper", { runId: run.id });
+  if (!queued) await executeScrapeRun(run.id);
+  revalidatePath("/app/scraper");
+  redirect(`/app/scraper/${run.id}`);
+}
+
+export async function saveScrapeToMentionsAction(formData: FormData) {
+  const session = await requireSession();
+  if (!canEdit(session.role)) throw new Error("You need editor access");
+  const runId = String(formData.get("runId") ?? "");
+  const projectId = String(formData.get("projectId") ?? "");
+  const run = await prisma.scrapeRun.findFirst({ where: { id: runId, workspaceId: session.workspaceId } });
+  if (!run) throw new Error("Scrape run not found");
+  await projectInWorkspace(session.workspaceId, projectId);
+  await saveScrapeToMentions(runId, projectId);
+  revalidatePath("/app/mentions");
+  revalidatePath(`/app/scraper/${runId}`);
+}
+
+export async function saveScrapeListAction(formData: FormData) {
+  const session = await requireSession();
+  if (!canEdit(session.role)) throw new Error("You need editor access");
+  const runId = String(formData.get("runId") ?? "");
+  const name = String(formData.get("name") ?? "").trim();
+  const run = await prisma.scrapeRun.findFirst({ where: { id: runId, workspaceId: session.workspaceId } });
+  if (!run) throw new Error("Scrape run not found");
+  if (!name) throw new Error("Give the list a name");
+  await prisma.scrapeList.create({
+    data: {
+      workspaceId: session.workspaceId,
+      name,
+      toolId: run.toolId,
+      items: run.items ?? [],
+    },
+  });
+  revalidatePath("/app/scraper");
+  revalidatePath(`/app/scraper/${runId}`);
+}
+
+export async function saveApifyLimitAction(formData: FormData) {
+  const session = await requireSession();
+  if (!canAdmin(session.role)) throw new Error("You need admin access");
+  const limit = Number(formData.get("limit") ?? 25);
+  await prisma.workspace.update({
+    where: { id: session.workspaceId },
+    data: { apifyMonthlyLimitUsd: Number.isFinite(limit) && limit > 0 ? Math.min(limit, 5000) : 25 },
+  });
+  revalidatePath("/app/scraper");
 }
